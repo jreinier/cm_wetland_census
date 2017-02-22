@@ -1,48 +1,40 @@
--- Database generated with pgModeler (PostgreSQL Database Modeler).
--- pgModeler  version: 0.8.2-beta
--- PostgreSQL version: 9.5
--- Project Site: pgmodeler.com.br
--- Model Author: ---
+--
+-- PostgreSQL database dump
+--
 
+-- Dumped from database version 9.5.6
+-- Dumped by pg_dump version 9.5.3
+
+-- Started on 2017-02-22 10:30:26
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
 SET check_function_bodies = false;
--- ddl-end --
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 29 (class 2615 OID 652049)
+-- Name: wetland; Type: SCHEMA; Schema: -; Owner: jreinier
+--
+
+CREATE SCHEMA wetland;
 
 
--- Database creation must be done outside an multicommand file.
--- These commands were put in this file only for convenience.
--- -- object: "CM" | type: DATABASE --
--- -- DROP DATABASE IF EXISTS "CM";
--- CREATE DATABASE "CM"
--- 	ENCODING = 'UTF8'
--- 	LC_COLLATE = 'English_United States.UTF8'
--- 	LC_CTYPE = 'English_United States.UTF8'
--- 	TABLESPACE = pg_default
--- 	OWNER = postgres
--- ;
--- -- ddl-end --
--- 
+ALTER SCHEMA wetland OWNER TO jreinier;
 
--- object: wetland_census | type: SCHEMA --
--- DROP SCHEMA IF EXISTS wetland_census CASCADE;
-CREATE SCHEMA wetland_census;
--- ddl-end --
-ALTER SCHEMA wetland_census OWNER TO postgres;
--- ddl-end --
+SET search_path = wetland, pg_catalog;
 
-SET search_path TO pg_catalog,public,wetland_census;
--- ddl-end --
+--
+-- TOC entry 2009 (class 1255 OID 652050)
+-- Name: change_trigger(); Type: FUNCTION; Schema: wetland; Owner: postgres
+--
 
--- object: wetland_census.change_trigger | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.change_trigger() CASCADE;
-CREATE FUNCTION wetland_census.change_trigger ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY DEFINER
-	COST 100
-	AS $$
-
+CREATE FUNCTION change_trigger() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
  
         BEGIN
  
@@ -82,7443 +74,2408 @@ CREATE FUNCTION wetland_census.change_trigger ()
  
         END;
  
-
 $$;
--- ddl-end --
-ALTER FUNCTION wetland_census.change_trigger() OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_classification_insert | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.cm_wetland_classification_insert() CASCADE;
-CREATE FUNCTION wetland_census.cm_wetland_classification_insert ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
+ALTER FUNCTION wetland.change_trigger() OWNER TO postgres;
+
+--
+-- TOC entry 2010 (class 1255 OID 652051)
+-- Name: classification_upsert(); Type: FUNCTION; Schema: wetland; Owner: postgres
+--
+
+CREATE FUNCTION classification_upsert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-WITH class_all_id AS (
-SELECT fulcrum_id, created_at, updated_at, created_by, updated_by, system_created_at, system_updated_at, version, 
-status, project, assigned_to, latitude, longitude, geometry, reservation, polygon_id, data_recorded_by_initials, classification_level, landscape_position, inland_landform, water_flow_path, llww_modifiers, cowardin_classification, 
-cowardin_water_regime, cowardin_special_modifier, cowardin_special_modifier_other, plant_community, 
-plant_community_other, sp1, sp2, sp3, sp4, sp5, sp6, sp7, sp8, sp9, sp10, notes, photos, photos_caption, photos_url, 
-nextval ('wetland_census.wetland_classification_id_seq'::regclass) AS classification_id FROM wetland_census.wetland_classification wetland_class
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_id WHERE fulcrum_id = wetland_class.fulcrum_id
-	)),
+WITH
 
-class_landscape AS (SELECT regexp_split_to_table(landscape_position, ',') AS landscape_position, classification_id FROM class_all_id),
+class_landscape AS (SELECT fulcrum_id, NULLIF (split_part(landscape_position, ',', 1), '') AS landscape_position, NULLIF (split_part(landscape_position, ',', 2), '') AS modifier_one, NULLIF (split_part(landscape_position, ',', 3), '') AS modifier_two, NULLIF (split_part(landscape_position, ',', 4), '') AS modifier_three FROM wetland.wetland_classification),
 
-class_landform AS (SELECT regexp_split_to_table(inland_landform, ',') AS inland_landform, classification_id FROM class_all_id),
+class_landform AS (SELECT fulcrum_id, inland_landform FROM wetland.wetland_classification),
+class_waterflow AS (SELECT fulcrum_id, water_flow_path FROM wetland.wetland_classification),
 
-class_waterflow AS (SELECT regexp_split_to_table(water_flow_path, ',') AS water_flow_path, classification_id FROM class_all_id),
+class_llww_modifiers AS (SELECT fulcrum_id, NULLIF (split_part(llww_modifiers, ',', 1), '') AS mod_one, NULLIF (split_part(llww_modifiers, ',', 2), '') AS mod_two, NULLIF (split_part(llww_modifiers, ',', 3), '') AS mod_three, NULLIF (split_part(llww_modifiers, ',', 4), '') AS mod_four, NULLIF (split_part(llww_modifiers, ',', 5), '') AS mod_five FROM wetland.wetland_classification),
 
-class_llww_modifiers AS (SELECT regexp_split_to_table(llww_modifiers, ',') AS llww_modifiers, classification_id FROM class_all_id),
+class_cowardin AS (SELECT fulcrum_id, NULLIF (split_part(cowardin_classification, ',', 1), '') AS system, NULLIF (split_part(cowardin_classification, ',', 2), '') AS class, NULLIF (split_part(cowardin_classification, ',', 3), '') AS subclass FROM wetland.wetland_classification),
 
-class_cowardin AS (SELECT regexp_split_to_table(cowardin_classification, ',') AS cowardin_classification, classification_id FROM class_all_id),
+class_cowardin_special AS (SELECT fulcrum_id, NULLIF (split_part(cowardin_special_modifier, ',', 1), '') AS mod_one, NULLIF (split_part(cowardin_special_modifier, ',', 2), '') AS mod_two, NULLIF (split_part(cowardin_special_modifier, ',', 3), '') AS mod_three, NULLIF (split_part(cowardin_special_modifier, ',', 4), '') AS mod_four, NULLIF (split_part(cowardin_special_modifier, ',', 5), '') AS mod_five, NULLIF (split_part(cowardin_special_modifier, ',', 6), '') AS mod_six FROM wetland.wetland_classification),
 
-class_cowardin_special AS (SELECT regexp_split_to_table(cowardin_special_modifier, ',') AS cowardin_special_modifier, classification_id FROM class_all_id),
+class_cowardin_water AS (SELECT fulcrum_id, cowardin_water_regime FROM wetland.wetland_classification),
 
-class_cowardin_special_other AS (SELECT regexp_split_to_table(cowardin_special_modifier_other, ',') AS cowardin_special_modifier_other, classification_id FROM class_all_id),
-
-class_cowardin_water AS (SELECT regexp_split_to_table(cowardin_water_regime, ',') AS cowardin_water_regime, classification_id FROM class_all_id),
-
-class_plant_community AS (SELECT regexp_split_to_table(plant_community, ',') AS plant_community, classification_id FROM class_all_id),
-
-class_plant_community_other AS (SELECT regexp_split_to_table(plant_community_other, ',') AS plant_community_other, classification_id FROM class_all_id),
-
-class_coord AS (SELECT latitude, longitude, classification_id FROM class_all_id),
-
-class_geom AS (SELECT regexp_split_to_table(geometry, ',') AS geometry, classification_id FROM class_all_id),
-
-class_reservation AS (SELECT reservation, classification_id FROM class_all_id),
-
-class_poly_id AS (SELECT polygon_id, classification_id FROM class_all_id),
-
-class_recorder AS (SELECT regexp_split_to_table(data_recorded_by_initials, ',') AS data_recorded_by_initials, classification_id FROM class_all_id),
-
-class_sp1 AS (SELECT classification_id, sp1 FROM class_all_id),
-class_sp2 AS (SELECT classification_id, sp2 FROM class_all_id),
-class_sp3 AS (SELECT classification_id, sp3 FROM class_all_id),
-class_sp4 AS (SELECT classification_id, sp4 FROM class_all_id),
-class_sp5 AS (SELECT classification_id, sp5 FROM class_all_id),
-class_sp6 AS (SELECT classification_id, sp6 FROM class_all_id),
-class_sp7 AS (SELECT classification_id, sp7 FROM class_all_id),
-class_sp8 AS (SELECT classification_id, sp8 FROM class_all_id),
-class_sp9 AS (SELECT classification_id, sp9 FROM class_all_id),
-class_sp10 AS (SELECT classification_id, sp10 FROM class_all_id),
-class_notes AS (SELECT classification_id, notes FROM class_all_id),
-
-class_photos AS (SELECT regexp_split_to_table(photos, ',') AS photos, classification_id FROM class_all_id),
-class_photos_caption AS (SELECT regexp_split_to_table(photos_caption, ',') AS photos_caption, classification_id FROM class_all_id),
-class_photos_url AS (SELECT regexp_split_to_table(photos_url, ',') AS photos_url, classification_id FROM class_all_id),
+class_plant_community AS (SELECT fulcrum_id, NULLIF (split_part(plant_community, ',', 1), '') AS plant_community, NULLIF (split_part(plant_community, ',', 2), '') AS modifier_one, NULLIF (split_part(plant_community, ',', 3), '') AS modifier_two, NULLIF (split_part(plant_community, ',', 4), '') AS modifier_three FROM wetland.wetland_classification),
 
 
+ins1 AS (INSERT INTO wetland.classification_id SELECT polygon_id, reservation, classification_level, fulcrum_id FROM wetland.wetland_classification
+ON CONFLICT (fulcrum_id) DO UPDATE SET 
+polygon_number = EXCLUDED.polygon_number,
+reservation = EXCLUDED.reservation,
+classification_level = EXCLUDED.classification_level),
 
 
-ins1 AS (INSERT INTO wetland_census.cm_wetland_classification_id SELECT polygon_id, reservation, classification_level, classification_id, fulcrum_id FROM class_all_id
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_id WHERE fulcrum_id = class_all_id.fulcrum_id
-	)),
-
-ins2 AS (INSERT INTO wetland_census.cm_wetland_landscape_position_norm SELECT classification_id,landscape_position FROM class_landscape
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_landscape_position_norm WHERE classification_id = class_landscape.classification_id
-	)),
+ins2 AS (INSERT INTO wetland.landscape_position SELECT fulcrum_id, landscape_position, modifier_one, modifier_two, modifier_three FROM class_landscape
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+landscape_position = EXCLUDED.landscape_position,
+modifier_one = EXCLUDED.modifier_one,
+modifier_two = EXCLUDED.modifier_two,
+modifier_three = EXCLUDED.modifier_three),
 	
-ins3 AS (INSERT INTO wetland_census.cm_wetland_inland_landform_norm	SELECT classification_id,inland_landform FROM class_landform
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_inland_landform_norm WHERE classification_id = class_landform.classification_id
-	)),
+ins3 AS (INSERT INTO wetland.inland_landform SELECT fulcrum_id, inland_landform FROM class_landform
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+inland_landform = EXCLUDED.inland_landform),
 	
-ins4 AS (INSERT INTO wetland_census.cm_wetland_water_flow_path SELECT classification_id,water_flow_path FROM class_waterflow
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_water_flow_path WHERE classification_id = class_waterflow.classification_id
-	)),
+ins4 AS (INSERT INTO wetland.water_flow_path SELECT fulcrum_id, water_flow_path FROM class_waterflow
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+water_flow_path = EXCLUDED.water_flow_path),
 	
-ins5 AS (INSERT INTO wetland_census.cm_wetland_llww_modifiers SELECT classification_id,llww_modifiers FROM class_llww_modifiers
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_llww_modifiers WHERE classification_id = class_llww_modifiers.classification_id
-	)),
+ins5 AS (INSERT INTO wetland.llww_modifiers SELECT fulcrum_id, mod_one, mod_two, mod_three, mod_four, mod_five FROM class_llww_modifiers
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+mod_one = EXCLUDED.mod_one,
+mod_two = EXCLUDED.mod_two,
+mod_three = EXCLUDED.mod_three,
+mod_four = EXCLUDED.mod_four,
+mod_five = EXCLUDED.mod_five),
 	
-ins6 AS (INSERT INTO wetland_census.cm_wetland_cowardin_classification SELECT classification_id,cowardin_classification FROM class_cowardin
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_cowardin_classification WHERE classification_id = class_cowardin.classification_id
-	)),
+ins6 AS (INSERT INTO wetland.cowardin_classification SELECT fulcrum_id, system, class, subclass FROM class_cowardin
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+system = EXCLUDED.system,
+class = EXCLUDED.class,
+subclass = EXCLUDED.subclass),
 	
-ins7 AS (INSERT INTO wetland_census.cm_wetland_cowardin_water_regime SELECT classification_id,cowardin_water_regime FROM class_cowardin_water
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_cowardin_water_regime WHERE classification_id = class_cowardin_water.classification_id
-	)),
+ins7 AS (INSERT INTO wetland.cowardin_water_regime SELECT fulcrum_id, cowardin_water_regime FROM class_cowardin_water
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+cowardin_water_regime = EXCLUDED.cowardin_water_regime),
 	
-ins8 AS (INSERT INTO wetland_census.cm_wetland_cowardin_special_modifier SELECT classification_id,cowardin_special_modifier FROM class_cowardin_special
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_cowardin_special_modifier WHERE classification_id = class_cowardin_special.classification_id
-	)),
+ins8 AS (INSERT INTO wetland.cowardin_special_modifiers SELECT fulcrum_id, mod_one, mod_two, mod_three, mod_four, mod_five, mod_six FROM class_cowardin_special
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+mod_one = EXCLUDED.mod_one,
+mod_two = EXCLUDED.mod_two,
+mod_three = EXCLUDED.mod_three,
+mod_four = EXCLUDED.mod_four,
+mod_five = EXCLUDED.mod_five,
+mod_six = EXCLUDED.mod_six)
 	
-ins9 AS (INSERT INTO wetland_census.cm_wetland_plant_community_norm SELECT classification_id, plant_community FROM class_plant_community
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_plant_community_norm WHERE classification_id = class_plant_community.classification_id
-	)),
+INSERT INTO wetland.plant_community_classification SELECT fulcrum_id, plant_community, modifier_one, modifier_two, modifier_three FROM class_plant_community
+ON CONFLICT (fulcrum_id) DO UPDATE SET
+plant_community = EXCLUDED.plant_community,
+modifier_one = EXCLUDED.modifier_one,
+modifier_two = EXCLUDED.modifier_two,
+modifier_three = EXCLUDED.modifier_three
 	
-ins10 AS (INSERT INTO wetland_census.cm_wetland_cowardin_special_modifier_other SELECT classification_id, cowardin_special_modifier_other FROM class_cowardin_special_other
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_cowardin_special_modifier_other WHERE classification_id = class_cowardin_special_other.classification_id
-	)),
-	
-ins11 AS (INSERT INTO wetland_census.cm_wetland_plant_community_other SELECT classification_id, plant_community_other FROM class_plant_community_other
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_plant_community_other WHERE classification_id = class_plant_community_other.classification_id
-	)),
-	
-ins12 AS (INSERT INTO wetland_census.cm_wetland_classification_coordinates SELECT classification_id, latitude, longitude FROM class_coord
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_coordinates WHERE classification_id = class_coord.classification_id
-	)),
-	
-ins13 AS (INSERT INTO wetland_census.cm_wetland_classification_geometry SELECT classification_id, geometry FROM class_geom
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_geometry WHERE classification_id = class_geom.classification_id
-	)),
-	
-ins14 AS (INSERT INTO wetland_census.cm_wetland_classification_reservation SELECT classification_id, reservation FROM class_reservation
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_reservation WHERE classification_id = class_reservation.classification_id
-	)),
-	
-ins15 AS (INSERT INTO wetland_census.cm_wetland_classification_polygon_id SELECT classification_id, polygon_id FROM class_poly_id
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_polygon_id WHERE classification_id = class_poly_id.classification_id
-	)),
-	
-ins16 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp1 FROM class_sp1
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp1.classification_id AND plant_species = class_sp1.sp1
-	) AND class_sp1.sp1 IS NOT NULL),
-	
-ins17 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp2 FROM class_sp2
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp2.classification_id AND plant_species = class_sp2.sp2
-	)AND class_sp2.sp2 IS NOT NULL),
-	
-ins18 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp3 FROM class_sp3
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp3.classification_id AND plant_species = class_sp3.sp3
-	)AND class_sp3.sp3 IS NOT NULL),
-	
-ins19 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp4 FROM class_sp4
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp4.classification_id AND plant_species = class_sp4.sp4
-	)AND class_sp4.sp4 IS NOT NULL),
-	
-ins20 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp5 FROM class_sp5
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp5.classification_id AND plant_species = class_sp5.sp5
-	)AND class_sp5.sp5 IS NOT NULL),
-	
-ins21 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp6 FROM class_sp6
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp6.classification_id AND plant_species = class_sp6.sp6
-	)AND class_sp6.sp6 IS NOT NULL),
-	
-ins22 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp7 FROM class_sp7
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp7.classification_id AND plant_species = class_sp7.sp7
-	)AND class_sp7.sp7 IS NOT NULL),
-	
-ins23 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp8 FROM class_sp8
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp8.classification_id AND plant_species = class_sp8.sp8
-	)AND class_sp8.sp8 IS NOT NULL),
-	
-ins24 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp9 FROM class_sp9
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp9.classification_id AND plant_species = class_sp9.sp9
-	)AND class_sp9.sp9 IS NOT NULL),
-	
-ins25 AS (INSERT INTO wetland_census.cm_wetland_dominant_species SELECT classification_id, sp10 FROM class_sp10
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_dominant_species WHERE classification_id = class_sp10.classification_id AND plant_species = class_sp10.sp10
-	)AND class_sp10.sp10 IS NOT NULL),
-	
-ins26 AS (INSERT INTO wetland_census.cm_wetland_classification_notes SELECT classification_id, notes FROM class_notes
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_classification_notes WHERE classification_id = class_notes.classification_id) 
-	AND class_notes.notes IS NOT NULL),
-	
-ins27 AS (INSERT INTO wetland_census.cm_wetland_photos_norm SELECT classification_id, photos FROM class_photos
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_photos_norm WHERE classification_id = class_photos.classification_id AND photos = class_photos.photos
-	)AND class_photos.photos IS NOT NULL),
-
-ins28 AS (INSERT INTO wetland_census.cm_wetland_photos_caption_norm SELECT classification_id, photos_caption FROM class_photos_caption
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_photos_caption_norm WHERE classification_id = class_photos_caption.classification_id AND photos_caption = class_photos_caption.photos_caption
-	)AND class_photos_caption.photos_caption IS NOT NULL)
-
-INSERT INTO wetland_census.cm_wetland_photos_url_norm SELECT classification_id, photos_url FROM class_photos_url
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.cm_wetland_photos_url_norm WHERE classification_id = class_photos_url.classification_id AND photos_url = class_photos_url.photos_url
-	)AND class_photos_url.photos_url IS NOT NULL
 ;	
 	
 RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.cm_wetland_classification_insert() OWNER TO postgres;
--- ddl-end --
+END $$;
 
--- object: wetland_census.oram_metric1_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric1_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric1_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-BEGIN	
-WITH metric1_value_temp AS (
-SELECT norm1.oram_id, norm1.selection, lookup.value AS metric1_value, lookup.lookup_id FROM wetland_census.metric1_norm norm1 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm1.selection),
-	
-upsert1 AS (UPDATE wetland_census.metric1_value value1 SET oram_id = value1_temp.oram_id, selection = value1_temp.selection, metric1_value = value1_temp.metric1_value,
-lookup_id = value1_temp.lookup_id
-FROM metric1_value_temp value1_temp 
-WHERE value1.oram_id = value1_temp.oram_id AND value1.selection = value1_temp.selection)
-	
-INSERT INTO wetland_census.metric1_value SELECT oram_id, selection, metric1_value, lookup_id FROM metric1_value_temp value1_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric1_value value1 WHERE value1.oram_id = value1_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric1_value() OWNER TO postgres;
--- ddl-end --
+ALTER FUNCTION wetland.classification_upsert() OWNER TO postgres;
 
--- object: wetland_census.oram_metric2a_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric2a_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric2a_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 2011 (class 1255 OID 652052)
+-- Name: oram_upsert(); Type: FUNCTION; Schema: wetland; Owner: postgres
+--
 
-BEGIN	
-WITH metric2a_value_temp AS (
-SELECT norm2a.oram_id, norm2a.selection, lookup.value AS metric2a_value, lookup.lookup_id FROM wetland_census.metric2a_norm norm2a LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm2a.selection),
-	
-upsert2a AS (UPDATE wetland_census.metric2a_value value2a SET oram_id = value2a_temp.oram_id, selection = value2a_temp.selection, metric2a_value = value2a_temp.metric2a_value,
-lookup_id = value2a_temp.lookup_id
-FROM metric2a_value_temp value2a_temp 
-WHERE value2a.oram_id = value2a_temp.oram_id AND value2a.selection = value2a_temp.selection)
-	
-INSERT INTO wetland_census.metric2a_value SELECT oram_id, selection, metric2a_value, lookup_id FROM metric2a_value_temp value2a_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric2a_value value2a WHERE value2a.oram_id = value2a_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric2a_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric2b_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric2b_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric2b_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric2b_value_temp AS (
-SELECT norm2b.oram_id, norm2b.selection, lookup.value AS metric2b_value, lookup.lookup_id FROM wetland_census.metric2b_norm norm2b LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm2b.selection),
-	
-upsert2b AS (UPDATE wetland_census.metric2b_value value2b SET oram_id = value2b_temp.oram_id, selection = value2b_temp.selection, metric2b_value = value2b_temp.metric2b_value,
-lookup_id = value2b_temp.lookup_id
-FROM metric2b_value_temp value2b_temp 
-WHERE value2b.oram_id = value2b_temp.oram_id AND value2b.selection = value2b_temp.selection)
-	
-INSERT INTO wetland_census.metric2b_value SELECT oram_id, selection, metric2b_value, lookup_id FROM metric2b_value_temp value2b_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric2b_value value2b WHERE value2b.oram_id = value2b_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric2b_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric3a_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric3a_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric3a_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric3a_value_temp AS (
-SELECT norm3a.oram_id, norm3a.selection, lookup.value AS metric3a_value, lookup.lookup_id FROM wetland_census.metric3a_norm norm3a LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm3a.selection),
-	
-upsert3a AS (UPDATE wetland_census.metric3a_value value3a SET oram_id = value3a_temp.oram_id, selection = value3a_temp.selection, metric3a_value = value3a_temp.metric3a_value,
-lookup_id = value3a_temp.lookup_id
-FROM metric3a_value_temp value3a_temp 
-WHERE value3a.oram_id = value3a_temp.oram_id AND value3a.selection = value3a_temp.selection)
-	
-INSERT INTO wetland_census.metric3a_value SELECT oram_id, selection, metric3a_value, lookup_id FROM metric3a_value_temp value3a_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3a_value value3a WHERE value3a.oram_id = value3a_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric3a_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric3b_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric3b_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric3b_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric3b_value_temp AS (
-SELECT norm3b.oram_id, norm3b.selection, lookup.value AS metric3b_value, lookup.lookup_id FROM wetland_census.metric3b_norm norm3b LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm3b.selection),
-	
-upsert3b AS (UPDATE wetland_census.metric3b_value value3b SET oram_id = value3b_temp.oram_id, selection = value3b_temp.selection, metric3b_value = value3b_temp.metric3b_value,
-lookup_id = value3b_temp.lookup_id
-FROM metric3b_value_temp value3b_temp 
-WHERE value3b.oram_id = value3b_temp.oram_id AND value3b.selection = value3b_temp.selection)
-	
-INSERT INTO wetland_census.metric3b_value SELECT oram_id, selection, metric3b_value, lookup_id FROM metric3b_value_temp value3b_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3b_value value3b WHERE value3b.oram_id = value3b_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric3b_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric3c_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric3c_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric3c_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric3c_value_temp AS (
-SELECT norm3c.oram_id, norm3c.selection, lookup.value AS metric3c_value, lookup.lookup_id FROM wetland_census.metric3c_norm norm3c LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm3c.selection),
-	
-upsert3c AS (UPDATE wetland_census.metric3c_value value3c SET oram_id = value3c_temp.oram_id, selection = value3c_temp.selection, metric3c_value = value3c_temp.metric3c_value,
-lookup_id = value3c_temp.lookup_id
-FROM metric3c_value_temp value3c_temp 
-WHERE value3c.oram_id = value3c_temp.oram_id AND value3c.selection = value3c_temp.selection)
-	
-INSERT INTO wetland_census.metric3c_value SELECT oram_id, selection, metric3c_value, lookup_id FROM metric3c_value_temp value3c_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3c_value value3c WHERE value3c.oram_id = value3c_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric3c_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric3d_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric3d_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric3d_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric3d_value_temp AS (
-SELECT norm3d.oram_id, norm3d.selection, lookup.value AS metric3d_value, lookup.lookup_id FROM wetland_census.metric3d_norm norm3d LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm3d.selection),
-	
-upsert3d AS (UPDATE wetland_census.metric3d_value value3d SET oram_id = value3d_temp.oram_id, selection = value3d_temp.selection, metric3d_value = value3d_temp.metric3d_value,
-lookup_id = value3d_temp.lookup_id
-FROM metric3d_value_temp value3d_temp 
-WHERE value3d.oram_id = value3d_temp.oram_id AND value3d.selection = value3d_temp.selection)
-	
-INSERT INTO wetland_census.metric3d_value SELECT oram_id, selection, metric3d_value, lookup_id FROM metric3d_value_temp value3d_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3d_value value3d WHERE value3d.oram_id = value3d_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric3d_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric3e_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric3e_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric3e_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric3e_value_temp AS (
-SELECT norm3e.oram_id, norm3e.selection, lookup.value AS metric3e_value, lookup.lookup_id FROM wetland_census.metric3e_norm norm3e LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm3e.selection AND lookup.metric = 'm3e_modifications_to_hydrologic_regime'),
-	
-upsert3e AS (UPDATE wetland_census.metric3e_value value3e SET oram_id = value3e_temp.oram_id, selection = value3e_temp.selection, metric3e_value = value3e_temp.metric3e_value,
-lookup_id = value3e_temp.lookup_id
-FROM metric3e_value_temp value3e_temp 
-WHERE value3e.oram_id = value3e_temp.oram_id AND value3e.selection = value3e_temp.selection)
-	
-INSERT INTO wetland_census.metric3e_value SELECT oram_id, selection, metric3e_value, lookup_id FROM metric3e_value_temp value3e_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3e_value value3e WHERE value3e.oram_id = value3e_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric3e_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric4a_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric4a_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric4a_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric4a_value_temp AS (
-SELECT norm4a.oram_id, norm4a.selection, lookup.value AS metric4a_value, lookup.lookup_id FROM wetland_census.metric4a_norm norm4a LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm4a.selection AND lookup.metric = 'm4a_substrate_disturbance'),
-	
-upsert4a AS (UPDATE wetland_census.metric4a_value value4a SET oram_id = value4a_temp.oram_id, selection = value4a_temp.selection, metric4a_value = value4a_temp.metric4a_value,
-lookup_id = value4a_temp.lookup_id
-FROM metric4a_value_temp value4a_temp 
-WHERE value4a.oram_id = value4a_temp.oram_id AND value4a.selection = value4a_temp.selection)
-	
-INSERT INTO wetland_census.metric4a_value SELECT oram_id, selection, metric4a_value, lookup_id FROM metric4a_value_temp value4a_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4a_value value4a WHERE value4a.oram_id = value4a_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric4a_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric4b_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric4b_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric4b_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric4b_value_temp AS (
-SELECT norm4b.oram_id, norm4b.selection, lookup.value AS metric4b_value, lookup.lookup_id FROM wetland_census.metric4b_norm norm4b LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm4b.selection),
-	
-upsert4b AS (UPDATE wetland_census.metric4b_value value4b SET oram_id = value4b_temp.oram_id, selection = value4b_temp.selection, metric4b_value = value4b_temp.metric4b_value,
-lookup_id = value4b_temp.lookup_id
-FROM metric4b_value_temp value4b_temp 
-WHERE value4b.oram_id = value4b_temp.oram_id AND value4b.selection = value4b_temp.selection)
-	
-INSERT INTO wetland_census.metric4b_value SELECT oram_id, selection, metric4b_value, lookup_id FROM metric4b_value_temp value4b_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4b_value value4b WHERE value4b.oram_id = value4b_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric4b_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric4c_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric4c_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric4c_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric4c_value_temp AS (
-SELECT norm4c.oram_id, norm4c.selection, lookup.value AS metric4c_value, lookup.lookup_id FROM wetland_census.metric4c_norm norm4c LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm4c.selection AND lookup.metric =
-'m4c_habitat_alteration'),
-	
-upsert4c AS (UPDATE wetland_census.metric4c_value value4c SET oram_id = value4c_temp.oram_id, selection = value4c_temp.selection, metric4c_value = value4c_temp.metric4c_value,
-lookup_id = value4c_temp.lookup_id
-FROM metric4c_value_temp value4c_temp 
-WHERE value4c.oram_id = value4c_temp.oram_id AND value4c.selection = value4c_temp.selection)
-	
-INSERT INTO wetland_census.metric4c_value SELECT oram_id, selection, metric4c_value, lookup_id FROM metric4c_value_temp value4c_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4c_value value4c WHERE value4c.oram_id = value4c_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric4c_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric5_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric5_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric5_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric5_value_temp AS (
-SELECT norm5.oram_id, norm5.selection, lookup.value AS metric5_value, lookup.lookup_id FROM wetland_census.metric5_norm norm5 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm5.selection),
-	
-upsert5 AS (UPDATE wetland_census.metric5_value value5 SET oram_id = value5_temp.oram_id, selection = value5_temp.selection, metric5_value = value5_temp.metric5_value,
-lookup_id = value5_temp.lookup_id
-FROM metric5_value_temp value5_temp 
-WHERE value5.oram_id = value5_temp.oram_id AND value5.selection = value5_temp.selection)
-	
-INSERT INTO wetland_census.metric5_value SELECT oram_id, selection, metric5_value, lookup_id FROM metric5_value_temp value5_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric5_value value5 WHERE value5.oram_id = value5_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric5_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a1_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a1_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a1_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a1_value_temp AS (
-SELECT norm6a1.oram_id, norm6a1.selection, lookup.value AS metric6a1_value, lookup.lookup_id FROM wetland_census.metric6a1_norm norm6a1 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a1.selection AND lookup.metric =
-'m6a_aquatic_bed'),
-	
-upsert6a1 AS (UPDATE wetland_census.metric6a1_value value6a1 SET oram_id = value6a1_temp.oram_id, selection = value6a1_temp.selection, metric6a1_value = value6a1_temp.metric6a1_value,
-lookup_id = value6a1_temp.lookup_id
-FROM metric6a1_value_temp value6a1_temp 
-WHERE value6a1.oram_id = value6a1_temp.oram_id AND value6a1.selection = value6a1_temp.selection)
-	
-INSERT INTO wetland_census.metric6a1_value SELECT oram_id, selection, metric6a1_value, lookup_id FROM metric6a1_value_temp value6a1_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a1_value value6a1 WHERE value6a1.oram_id = value6a1_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a1_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a2_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a2_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a2_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a2_value_temp AS (
-SELECT norm6a2.oram_id, norm6a2.selection, lookup.value AS metric6a2_value, lookup.lookup_id FROM wetland_census.metric6a2_norm norm6a2 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a2.selection AND lookup.metric =
-'m6a_emergent'),
-	
-upsert6a2 AS (UPDATE wetland_census.metric6a2_value value6a2 SET oram_id = value6a2_temp.oram_id, selection = value6a2_temp.selection, metric6a2_value = value6a2_temp.metric6a2_value,
-lookup_id = value6a2_temp.lookup_id
-FROM metric6a2_value_temp value6a2_temp 
-WHERE value6a2.oram_id = value6a2_temp.oram_id AND value6a2.selection = value6a2_temp.selection)
-	
-INSERT INTO wetland_census.metric6a2_value SELECT oram_id, selection, metric6a2_value, lookup_id FROM metric6a2_value_temp value6a2_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a2_value value6a2 WHERE value6a2.oram_id = value6a2_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a2_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a3_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a3_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a3_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a3_value_temp AS (
-SELECT norm6a3.oram_id, norm6a3.selection, lookup.value AS metric6a3_value, lookup.lookup_id FROM wetland_census.metric6a3_norm norm6a3 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a3.selection AND lookup.metric =
-'m6a_shrub'),
-	
-upsert6a3 AS (UPDATE wetland_census.metric6a3_value value6a3 SET oram_id = value6a3_temp.oram_id, selection = value6a3_temp.selection, metric6a3_value = value6a3_temp.metric6a3_value,
-lookup_id = value6a3_temp.lookup_id
-FROM metric6a3_value_temp value6a3_temp 
-WHERE value6a3.oram_id = value6a3_temp.oram_id AND value6a3.selection = value6a3_temp.selection)
-	
-INSERT INTO wetland_census.metric6a3_value SELECT oram_id, selection, metric6a3_value, lookup_id FROM metric6a3_value_temp value6a3_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a3_value value6a3 WHERE value6a3.oram_id = value6a3_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a3_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a4_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a4_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a4_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a4_value_temp AS (
-SELECT norm6a4.oram_id, norm6a4.selection, lookup.value AS metric6a4_value, lookup.lookup_id FROM wetland_census.metric6a4_norm norm6a4 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a4.selection AND lookup.metric = 'm6a_forest'),
-	
-upsert6a4 AS (UPDATE wetland_census.metric6a4_value value6a4 SET oram_id = value6a4_temp.oram_id, selection = value6a4_temp.selection, metric6a4_value = value6a4_temp.metric6a4_value,
-lookup_id = value6a4_temp.lookup_id
-FROM metric6a4_value_temp value6a4_temp 
-WHERE value6a4.oram_id = value6a4_temp.oram_id AND value6a4.selection = value6a4_temp.selection)
-	
-INSERT INTO wetland_census.metric6a4_value SELECT oram_id, selection, metric6a4_value, lookup_id FROM metric6a4_value_temp value6a4_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a4_value value6a4 WHERE value6a4.oram_id = value6a4_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a4_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a5_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a5_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a5_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a5_value_temp AS (
-SELECT norm6a5.oram_id, norm6a5.selection, lookup.value AS metric6a5_value, lookup.lookup_id FROM wetland_census.metric6a5_norm norm6a5 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a5.selection AND lookup.metric = 'm6a_mudflats'),
-	
-upsert6a5 AS (UPDATE wetland_census.metric6a5_value value6a5 SET oram_id = value6a5_temp.oram_id, selection = value6a5_temp.selection, metric6a5_value = value6a5_temp.metric6a5_value,
-lookup_id = value6a5_temp.lookup_id
-FROM metric6a5_value_temp value6a5_temp 
-WHERE value6a5.oram_id = value6a5_temp.oram_id AND value6a5.selection = value6a5_temp.selection)
-	
-INSERT INTO wetland_census.metric6a5_value SELECT oram_id, selection, metric6a5_value, lookup_id FROM metric6a5_value_temp value6a5_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a5_value value6a5 WHERE value6a5.oram_id = value6a5_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a5_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a6_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a6_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a6_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a6_value_temp AS (
-SELECT norm6a6.oram_id, norm6a6.selection, lookup.value AS metric6a6_value, lookup.lookup_id FROM wetland_census.metric6a6_norm norm6a6 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a6.selection AND lookup.metric = 'm6a_open_water'),
-	
-upsert6a6 AS (UPDATE wetland_census.metric6a6_value value6a6 SET oram_id = value6a6_temp.oram_id, selection = value6a6_temp.selection, metric6a6_value = value6a6_temp.metric6a6_value,
-lookup_id = value6a6_temp.lookup_id
-FROM metric6a6_value_temp value6a6_temp 
-WHERE value6a6.oram_id = value6a6_temp.oram_id AND value6a6.selection = value6a6_temp.selection)
-	
-INSERT INTO wetland_census.metric6a6_value SELECT oram_id, selection, metric6a6_value, lookup_id FROM metric6a6_value_temp value6a6_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a6_value value6a6 WHERE value6a6.oram_id = value6a6_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a6_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6a7_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6a7_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6a7_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6a7_value_temp AS (
-SELECT norm6a7.oram_id, norm6a7.selection, lookup.value AS metric6a7_value, lookup.lookup_id FROM wetland_census.metric6a7_norm norm6a7 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6a7.selection AND lookup.metric = 'm6a_other'),
-	
-upsert6a7 AS (UPDATE wetland_census.metric6a7_value value6a7 SET oram_id = value6a7_temp.oram_id, selection = value6a7_temp.selection, metric6a7_value = value6a7_temp.metric6a7_value,
-lookup_id = value6a7_temp.lookup_id
-FROM metric6a7_value_temp value6a7_temp 
-WHERE value6a7.oram_id = value6a7_temp.oram_id AND value6a7.selection = value6a7_temp.selection)
-	
-INSERT INTO wetland_census.metric6a7_value SELECT oram_id, selection, metric6a7_value, lookup_id FROM metric6a7_value_temp value6a7_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a7_value value6a7 WHERE value6a7.oram_id = value6a7_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6a7_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6b_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6b_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6b_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6b_value_temp AS (
-SELECT norm6b.oram_id, norm6b.selection, lookup.value AS metric6b_value, lookup.lookup_id FROM wetland_census.metric6b_norm norm6b LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6b.selection),
-	
-upsert6b AS (UPDATE wetland_census.metric6b_value value6b SET oram_id = value6b_temp.oram_id, selection = value6b_temp.selection, metric6b_value = value6b_temp.metric6b_value,
-lookup_id = value6b_temp.lookup_id
-FROM metric6b_value_temp value6b_temp 
-WHERE value6b.oram_id = value6b_temp.oram_id AND value6b.selection = value6b_temp.selection)
-	
-INSERT INTO wetland_census.metric6b_value SELECT oram_id, selection, metric6b_value, lookup_id FROM metric6b_value_temp value6b_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6b_value value6b WHERE value6b.oram_id = value6b_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6b_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6c_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6c_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6c_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6c_value_temp AS (
-SELECT norm6c.oram_id, norm6c.selection, lookup.value AS metric6c_value, lookup.lookup_id FROM wetland_census.metric6c_norm norm6c LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6c.selection),
-	
-upsert6c AS (UPDATE wetland_census.metric6c_value value6c SET oram_id = value6c_temp.oram_id, selection = value6c_temp.selection, metric6c_value = value6c_temp.metric6c_value,
-lookup_id = value6c_temp.lookup_id
-FROM metric6c_value_temp value6c_temp 
-WHERE value6c.oram_id = value6c_temp.oram_id AND value6c.selection = value6c_temp.selection)
-	
-INSERT INTO wetland_census.metric6c_value SELECT oram_id, selection, metric6c_value, lookup_id FROM metric6c_value_temp value6c_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6c_value value6c WHERE value6c.oram_id = value6c_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6c_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6d1_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6d1_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6d1_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6d1_value_temp AS (
-SELECT norm6d1.oram_id, norm6d1.selection, lookup.value AS metric6d1_value, lookup.lookup_id FROM wetland_census.metric6d1_norm norm6d1 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6d1.selection AND lookup.metric = 'm6d_microtopography_vegetation_hummuckstussuck'),
-	
-upsert6d1 AS (UPDATE wetland_census.metric6d1_value value6d1 SET oram_id = value6d1_temp.oram_id, selection = value6d1_temp.selection, metric6d1_value = value6d1_temp.metric6d1_value,
-lookup_id = value6d1_temp.lookup_id
-FROM metric6d1_value_temp value6d1_temp 
-WHERE value6d1.oram_id = value6d1_temp.oram_id AND value6d1.selection = value6d1_temp.selection)
-	
-INSERT INTO wetland_census.metric6d1_value SELECT oram_id, selection, metric6d1_value, lookup_id FROM metric6d1_value_temp value6d1_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d1_value value6d1 WHERE value6d1.oram_id = value6d1_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6d1_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6d2_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6d2_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6d2_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6d2_value_temp AS (
-SELECT norm6d2.oram_id, norm6d2.selection, lookup.value AS metric6d2_value, lookup.lookup_id FROM wetland_census.metric6d2_norm norm6d2 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6d2.selection AND lookup.metric = 'm6d_microtopography_course_woody_debris_15cm_6in'),
-	
-upsert6d2 AS (UPDATE wetland_census.metric6d2_value value6d2 SET oram_id = value6d2_temp.oram_id, selection = value6d2_temp.selection, metric6d2_value = value6d2_temp.metric6d2_value,
-lookup_id = value6d2_temp.lookup_id
-FROM metric6d2_value_temp value6d2_temp 
-WHERE value6d2.oram_id = value6d2_temp.oram_id AND value6d2.selection = value6d2_temp.selection)
-	
-INSERT INTO wetland_census.metric6d2_value SELECT oram_id, selection, metric6d2_value, lookup_id FROM metric6d2_value_temp value6d2_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d2_value value6d2 WHERE value6d2.oram_id = value6d2_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6d2_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6d3_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6d3_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6d3_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6d3_value_temp AS (
-SELECT norm6d3.oram_id, norm6d3.selection, lookup.value AS metric6d3_value, lookup.lookup_id FROM wetland_census.metric6d3_norm norm6d3 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6d3.selection AND lookup.metric = 'm6d_microtopography_standing_dead_25cm_10in_dbh'),
-	
-upsert6d3 AS (UPDATE wetland_census.metric6d3_value value6d3 SET oram_id = value6d3_temp.oram_id, selection = value6d3_temp.selection, metric6d3_value = value6d3_temp.metric6d3_value,
-lookup_id = value6d3_temp.lookup_id
-FROM metric6d3_value_temp value6d3_temp 
-WHERE value6d3.oram_id = value6d3_temp.oram_id AND value6d3.selection = value6d3_temp.selection)
-	
-INSERT INTO wetland_census.metric6d3_value SELECT oram_id, selection, metric6d3_value, lookup_id FROM metric6d3_value_temp value6d3_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d3_value value6d3 WHERE value6d3.oram_id = value6d3_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6d3_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric6d4_value | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric6d4_value() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric6d4_value ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN	
-WITH metric6d4_value_temp AS (
-SELECT norm6d4.oram_id, norm6d4.selection, lookup.value AS metric6d4_value, lookup.lookup_id FROM wetland_census.metric6d4_norm norm6d4 LEFT OUTER JOIN
-	wetland_census.oram_score_lookup_all lookup ON lookup.selection  = norm6d4.selection AND lookup.metric = 'm6d_microtopography_amphibian_breeding_pools'),
-	
-upsert6d4 AS (UPDATE wetland_census.metric6d4_value value6d4 SET oram_id = value6d4_temp.oram_id, selection = value6d4_temp.selection, metric6d4_value = value6d4_temp.metric6d4_value,
-lookup_id = value6d4_temp.lookup_id
-FROM metric6d4_value_temp value6d4_temp 
-WHERE value6d4.oram_id = value6d4_temp.oram_id AND value6d4.selection = value6d4_temp.selection)
-	
-INSERT INTO wetland_census.metric6d4_value SELECT oram_id, selection, metric6d4_value, lookup_id FROM metric6d4_value_temp value6d4_temp
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d4_value value6d4 WHERE value6d4.oram_id = value6d4_temp.oram_id
-	)
-;
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric6d4_value() OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_metric_insert_all | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_metric_insert_all() CASCADE;
-CREATE FUNCTION wetland_census.oram_metric_insert_all ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
+CREATE FUNCTION oram_upsert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
 BEGIN
-WITH oram_all_id AS ( SELECT fulcrum_id, created_at, updated_at, created_by, updated_by, system_created_at, system_updated_at, version, status, project, assigned_to, latitude, longitude, geometry, reservation, polygon_id, date, data_recorded_by_initials, m1_wetland_area, m2a_upland_buffer_width, m2b_surrounding_land_use, m3a_sources_of_water, m3b_connectivity, m3c_maximum_water_depth, m3d_duration_inundation_saturation, m3e_modifications_to_hydrologic_regime, disturbances_hydro, m4a_substrate_disturbance, m4b_habitat_development, m4c_habitat_alteration, disturbances_substrate, disturbances_substrate_other, m6a_aquatic_bed, m6a_emergent, m6a_shrub, m6a_forest, m6a_mudflats, m6a_open_water, m6a_other, m6a_other_list, m6b_horizontal_plan_view_interspersion, m6c_coverage_of_invasive_plants, m6d_microtopography_vegetation_hummuckstussuck, m6d_microtopography_course_woody_debris_15cm_6in, m6d_microtopography_standing_dead_25cm_10in_dbh, m6d_microtopography_amphibian_breeding_pools, m5_special_wetlands, notes, photos, photos_caption, photos_url, nextval ('wetland_census.wetland_oram_id_seq'::regclass) AS oram_id FROM wetland_census.oram_v2 oram_v2
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_id WHERE fulcrum_id = oram_v2.fulcrum_id
-	)),
-oram_id_new AS(
-SELECT oram_id, fulcrum_id FROM oram_all_id
-),
-metric1_split AS(
-SELECT oram_id, regexp_split_to_table(m1_wetland_area, ',') AS selection1 FROM oram_all_id
-),
-metric2a_split AS(
-SELECT oram_id, regexp_split_to_table(m2a_upland_buffer_width, ',') AS selection2a FROM oram_all_id
-),
+WITH poly_split AS (SELECT reservation, regexp_split_to_table(polygon_id, ',') AS polygon_number, fulcrum_id FROM wetland.oram_v2),
+
 metric2b_split AS(
-SELECT oram_id, regexp_split_to_table(m2b_surrounding_land_use, ',') AS selection2b FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(m2b_surrounding_land_use,',',1), '') AS m2b_surrounding_land_use1, NULLIF (split_part(m2b_surrounding_land_use,',',2), '') AS m2b_surrounding_land_use2 FROM wetland.oram_v2
 ),
 metric3a_split AS(
-SELECT oram_id, regexp_split_to_table(m3a_sources_of_water, ',') AS selection3a FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(m3a_sources_of_water,',',1), '') AS m3a_sources_of_water1, NULLIF (split_part(m3a_sources_of_water,',',2), '') AS m3a_sources_of_water2, NULLIF (split_part(m3a_sources_of_water,',',3), '') AS m3a_sources_of_water3, NULLIF (split_part(m3a_sources_of_water,',',4), '') AS m3a_sources_of_water4, NULLIF (split_part(m3a_sources_of_water,',',5), '') AS m3a_sources_of_water5 FROM wetland.oram_v2
 ),
 metric3b_split AS(
-SELECT oram_id, regexp_split_to_table(m3b_connectivity, ',') AS selection3b FROM oram_all_id
-),
-metric3c_split AS(
-SELECT oram_id, regexp_split_to_table(m3c_maximum_water_depth, ',') AS selection3c FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(m3b_connectivity,',',1), '') AS m3b_connectivity1, NULLIF (split_part(m3b_connectivity,',',2), '') AS m3b_connectivity2, NULLIF (split_part(m3b_connectivity,',',3), '') AS m3b_connectivity3, NULLIF (split_part(m3b_connectivity,',',4), '') AS m3b_connectivity4 FROM wetland.oram_v2
 ),
 metric3d_split AS(
-SELECT oram_id, regexp_split_to_table(m3d_duration_inundation_saturation, ',') AS selection3d FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(m3d_duration_inundation_saturation,',',1), '') AS m3d_duration_inundation_saturation1, NULLIF (split_part(m3d_duration_inundation_saturation,',',2), '') AS m3d_duration_inundation_saturation2 FROM wetland.oram_v2
 ),
 metric3e_split AS(
-SELECT oram_id, regexp_split_to_table(m3e_modifications_to_hydrologic_regime, ',') AS selection3e FROM oram_all_id
-),
-metric4a_split AS(
-SELECT oram_id, regexp_split_to_table(m4a_substrate_disturbance, ',') AS selection4a FROM oram_all_id
-),
-metric4b_split AS(
-SELECT oram_id, regexp_split_to_table(m4b_habitat_development, ',') AS selection4b FROM oram_all_id
-),
-metric4c_split AS(
-SELECT oram_id, regexp_split_to_table(m4c_habitat_alteration, ',') AS selection4c FROM oram_all_id
-),
-metric5_split AS(
-SELECT oram_id, regexp_split_to_table(m5_special_wetlands, ',') AS selection5 FROM oram_all_id
-),
-metric6a1_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_aquatic_bed, ',') AS selection6a1 FROM oram_all_id
-),
-metric6a2_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_emergent, ',') AS selection6a2 FROM oram_all_id
-),
-metric6a3_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_shrub, ',') AS selection6a3 FROM oram_all_id
-),
-metric6a4_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_forest, ',') AS selection6a4 FROM oram_all_id
-),
-metric6a5_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_mudflats, ',') AS selection6a5 FROM oram_all_id
-),
-metric6a6_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_open_water, ',') AS selection6a6 FROM oram_all_id
-),
-metric6a7_split AS(
-SELECT oram_id, regexp_split_to_table(m6a_other, ',') AS selection6a7 FROM oram_all_id
-),
-metric6b_split AS(
-SELECT oram_id, regexp_split_to_table(m6b_horizontal_plan_view_interspersion, ',') AS selection6b FROM oram_all_id
-),
-metric6c_split AS(
-SELECT oram_id, regexp_split_to_table(m6c_coverage_of_invasive_plants, ',') AS selection6c FROM oram_all_id
-),
-metric6d1_split AS(
-SELECT oram_id, regexp_split_to_table(m6d_microtopography_vegetation_hummuckstussuck, ',') AS selection6d1 FROM oram_all_id
-),
-metric6d2_split AS(
-SELECT oram_id, regexp_split_to_table(m6d_microtopography_course_woody_debris_15cm_6in, ',') AS selection6d2 FROM oram_all_id
-),
-metric6d3_split AS(
-SELECT oram_id, regexp_split_to_table(m6d_microtopography_standing_dead_25cm_10in_dbh, ',') AS selection6d3 FROM oram_all_id
-),
-metric6d4_split AS(
-SELECT oram_id, regexp_split_to_table(m6d_microtopography_amphibian_breeding_pools, ',') AS selection6d4 FROM oram_all_id
-),
-polygon_id_split AS(
-SELECT oram_id, regexp_split_to_table(polygon_id, ',') AS polygon_id FROM oram_all_id
-),
-data_recorded_by_initials_split AS(
-SELECT oram_id, regexp_split_to_table(data_recorded_by_initials, ',') AS data_recorded_by_initials FROM oram_all_id
-),
-reservation_split AS(
-SELECT oram_id, regexp_split_to_table(reservation, ',') AS reservation FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(m3e_modifications_to_hydrologic_regime,',',1), '') AS m3e_modifications_to_hydrologic_regime1, NULLIF (split_part(m3e_modifications_to_hydrologic_regime,',',2), '') AS m3e_modifications_to_hydrologic_regime2 FROM wetland.oram_v2
 ),
 disturbances_hydro_split AS(
-SELECT oram_id, regexp_split_to_table(disturbances_hydro, ',') AS disturbances_hydro FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(disturbances_hydro,',',1), '') AS disturbances_hydro1, NULLIF (split_part(disturbances_hydro,',',2), '') AS disturbances_hydro2, NULLIF (split_part(disturbances_hydro,',',3), '') AS disturbances_hydro3, NULLIF (split_part(disturbances_hydro,',',4), '') AS disturbances_hydro4, NULLIF (split_part(disturbances_hydro,',',5), '') AS disturbances_hydro5, NULLIF (split_part(disturbances_hydro,',',6), '') AS disturbances_hydro6, NULLIF (split_part(disturbances_hydro,',',7), '') AS disturbances_hydro7, NULLIF (split_part(disturbances_hydro,',',8), '') AS disturbances_hydro8, NULLIF (split_part(disturbances_hydro,',',9), '') AS disturbances_hydro9, NULLIF (split_part(disturbances_hydro,',',10), '') AS disturbances_hydro10 FROM wetland.oram_v2
+),
+metric4a_split AS(
+SELECT fulcrum_id, NULLIF (split_part(m4a_substrate_disturbance,',',1), '') AS m4a_substrate_disturbance1, NULLIF (split_part(m4a_substrate_disturbance,',',2), '') AS m4a_substrate_disturbance2 FROM wetland.oram_v2
+),
+metric4c_split AS(
+SELECT fulcrum_id, NULLIF (split_part(m4c_habitat_alteration,',',1), '') AS m4c_habitat_alteration1, NULLIF (split_part(m4c_habitat_alteration,',',2), '') AS m4c_habitat_alteration2 FROM wetland.oram_v2
 ),
 disturbances_substrate_split AS(
-SELECT oram_id, regexp_split_to_table(disturbances_substrate, ',') AS disturbances_substrate FROM oram_all_id
+SELECT fulcrum_id, NULLIF (split_part(disturbances_substrate,',',1), '') AS disturbances_substrate1, NULLIF (split_part(disturbances_substrate,',',2), '') AS disturbances_substrate2, NULLIF (split_part(disturbances_substrate,',',3), '') AS disturbances_substrate3, NULLIF (split_part(disturbances_substrate,',',4), '') AS disturbances_substrate4, NULLIF (split_part(disturbances_substrate,',',5), '') AS disturbances_substrate5, NULLIF (split_part(disturbances_substrate,',',6), '') AS disturbances_substrate6, NULLIF (split_part(disturbances_substrate,',',7), '') AS disturbances_substrate7, NULLIF (split_part(disturbances_substrate,',',8), '') AS disturbances_substrate8, NULLIF (split_part(disturbances_substrate,',',9), '') AS disturbances_substrate9, NULLIF (split_part(disturbances_substrate,',',10), '') AS disturbances_substrate10, NULLIF (split_part(disturbances_substrate,',',11), '') AS disturbances_substrate11, NULLIF (split_part(disturbances_substrate,',',12), '') AS disturbances_substrate12 FROM wetland.oram_v2
 ),
-oram_notes AS(
-SELECT oram_id, notes FROM oram_all_id
+metric5_split AS(
+SELECT fulcrum_id, NULLIF (split_part(m5_special_wetlands,',',1), '') AS m5_special_wetlands1, NULLIF (split_part(m5_special_wetlands,',',2), '') AS m5_special_wetlands2 FROM wetland.oram_v2
 ),
-oram_photos AS (SELECT oram_id, regexp_split_to_table(photos, ',') AS photos FROM oram_all_id),
-oram_photos_caption AS (SELECT oram_id, regexp_split_to_table(photos_caption, ',') AS photos_caption FROM oram_all_id),
-oram_photos_url AS (SELECT oram_id, regexp_split_to_table(photos_url, ',') AS photos_url FROM oram_all_id),
 
-ins_id AS (INSERT INTO wetland_census.oram_id SELECT oram_id, fulcrum_id FROM oram_id_new
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_id WHERE fulcrum_id = oram_id_new.fulcrum_id
-	)),
-ins1 AS (INSERT INTO wetland_census.metric1_norm SELECT oram_id, selection1 FROM metric1_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric1_norm norm1 WHERE oram_id = metric1_split.oram_id
-	)),
-ins2 AS (INSERT INTO wetland_census.metric2a_norm SELECT oram_id, selection2a FROM metric2a_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric2a_norm norm2a WHERE oram_id = metric2a_split.oram_id
-	)),
-ins3 AS (INSERT INTO wetland_census.metric2b_norm SELECT oram_id, selection2b FROM metric2b_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric2b_norm norm2b WHERE oram_id = metric2b_split.oram_id
-	)),
-ins4 AS (INSERT INTO wetland_census.metric3a_norm SELECT oram_id, selection3a FROM metric3a_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3a_norm norm3a WHERE oram_id = metric3a_split.oram_id
-	)),
-ins5 AS (INSERT INTO wetland_census.metric3b_norm SELECT oram_id, selection3b FROM metric3b_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3b_norm norm3b WHERE oram_id = metric3b_split.oram_id
-	)),
-ins6 AS (INSERT INTO wetland_census.metric3c_norm SELECT oram_id, selection3c FROM metric3c_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3c_norm norm3c WHERE oram_id = metric3c_split.oram_id
-	)),
-ins7 AS (INSERT INTO wetland_census.metric3d_norm SELECT oram_id, selection3d FROM metric3d_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3d_norm norm3d WHERE oram_id = metric3d_split.oram_id
-	)),
-ins8 AS (INSERT INTO wetland_census.metric3e_norm SELECT oram_id, selection3e FROM metric3e_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric3e_norm norm3e WHERE oram_id = metric3e_split.oram_id
-	)),
-ins9 AS (INSERT INTO wetland_census.metric4a_norm SELECT oram_id, selection4a FROM metric4a_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4a_norm norm4a WHERE oram_id = metric4a_split.oram_id
-	)),
-ins10 AS (INSERT INTO wetland_census.metric4b_norm SELECT oram_id, selection4b FROM metric4b_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4b_norm norm4b WHERE oram_id = metric4b_split.oram_id
-	)),
-ins11 AS (INSERT INTO wetland_census.metric4c_norm SELECT oram_id, selection4c FROM metric4c_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric4c_norm norm4c WHERE oram_id = metric4c_split.oram_id
-	)),
-ins12 AS (INSERT INTO wetland_census.metric5_norm SELECT oram_id, selection5 FROM metric5_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric5_norm norm5 WHERE oram_id = metric5_split.oram_id
-	)),
-ins13 AS (INSERT INTO wetland_census.metric6a1_norm SELECT oram_id, selection6a1 FROM metric6a1_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a1_norm norm6a1 WHERE oram_id = metric6a1_split.oram_id
-	)),
-ins14 AS (INSERT INTO wetland_census.metric6a2_norm SELECT oram_id, selection6a2 FROM metric6a2_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a2_norm norm6a2 WHERE oram_id = metric6a2_split.oram_id
-	)),
-ins15 AS (INSERT INTO wetland_census.metric6a3_norm SELECT oram_id, selection6a3 FROM metric6a3_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a3_norm norm6a3 WHERE oram_id = metric6a3_split.oram_id
-	)),
-ins16 AS (INSERT INTO wetland_census.metric6a4_norm SELECT oram_id, selection6a4 FROM metric6a4_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a4_norm norm6a4 WHERE oram_id = metric6a4_split.oram_id
-	)),
-ins17 AS (INSERT INTO wetland_census.metric6a5_norm SELECT oram_id, selection6a5 FROM metric6a5_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a5_norm norm6a5 WHERE oram_id = metric6a5_split.oram_id
-	)),
-ins18 AS (INSERT INTO wetland_census.metric6a6_norm SELECT oram_id, selection6a6 FROM metric6a6_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a6_norm norm6a6 WHERE oram_id = metric6a6_split.oram_id
-	)),
-ins19 AS (INSERT INTO wetland_census.metric6a7_norm SELECT oram_id, selection6a7 FROM metric6a7_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6a7_norm norm6a7 WHERE oram_id = metric6a7_split.oram_id
-	)),
-ins20 AS (INSERT INTO wetland_census.metric6b_norm SELECT oram_id, selection6b FROM metric6b_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6b_norm norm6b WHERE oram_id = metric6b_split.oram_id
-	)),
-ins21 AS (INSERT INTO wetland_census.metric6c_norm SELECT oram_id, selection6c FROM metric6c_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6c_norm norm6c WHERE oram_id = metric6c_split.oram_id
-	)),
-ins22 AS (INSERT INTO wetland_census.metric6d1_norm SELECT oram_id, selection6d1 FROM metric6d1_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d1_norm norm6d1 WHERE oram_id = metric6d1_split.oram_id
-	)),
-ins23 AS (INSERT INTO wetland_census.metric6d2_norm SELECT oram_id, selection6d2 FROM metric6d2_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d2_norm norm6d2 WHERE oram_id = metric6d2_split.oram_id
-	)),
-ins24 AS (INSERT INTO wetland_census.metric6d3_norm SELECT oram_id, selection6d3 FROM metric6d3_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d3_norm norm6d3 WHERE oram_id = metric6d3_split.oram_id
-	)),
-ins25 AS (INSERT INTO wetland_census.metric6d4_norm SELECT oram_id, selection6d4 FROM metric6d4_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.metric6d4_norm norm6d4 WHERE oram_id = metric6d4_split.oram_id
-	)),	
-ins27 AS (INSERT INTO wetland_census.oram_poly_id_norm SELECT oram_id, polygon_id FROM polygon_id_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_poly_id_norm norm_poly_id WHERE oram_id = polygon_id_split.oram_id 
-	)),
-ins28 AS (INSERT INTO wetland_census.oram_recorder_norm SELECT oram_id, data_recorded_by_initials FROM data_recorded_by_initials_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_recorder_norm norm_recorder WHERE oram_id = data_recorded_by_initials_split.oram_id
-	)),
-ins29 AS (INSERT INTO wetland_census.oram_reservation_norm SELECT oram_id, reservation FROM reservation_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_reservation_norm norm_res WHERE oram_id = reservation_split.oram_id
-	)),
-ins30 AS (INSERT INTO wetland_census.hydro_disturbances_norm SELECT oram_id, disturbances_hydro FROM disturbances_hydro_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.hydro_disturbances_norm norm_disturbances_hydro WHERE oram_id = disturbances_hydro_split.oram_id
-	)),
-ins31 AS (INSERT INTO wetland_census.substrate_disturbances_norm SELECT oram_id, disturbances_substrate FROM disturbances_substrate_split
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.substrate_disturbances_norm WHERE oram_id = disturbances_substrate_split.oram_id
-	)),
-ins32 AS (INSERT INTO wetland_census.oram_notes SELECT oram_id, notes FROM oram_notes
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_notes WHERE oram_id = oram_notes.oram_id
-	) AND oram_notes.notes IS NOT NULL),
-ins33 AS (INSERT INTO wetland_census.oram_photos_norm SELECT oram_id, photos FROM oram_photos
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_photos_norm WHERE oram_id = oram_photos.oram_id AND photos = oram_photos.photos
-	)AND oram_photos.photos IS NOT NULL),
+joined AS ( 
+SELECT a.fulcrum_id, a.m1_wetland_area, a.m2a_upland_buffer_width, b.m2b_surrounding_land_use1, b.m2b_surrounding_land_use2, c.m3a_sources_of_water1, c.m3a_sources_of_water2, c.m3a_sources_of_water3, c.m3a_sources_of_water4, c.m3a_sources_of_water5, d.m3b_connectivity1, d.m3b_connectivity2, d.m3b_connectivity3, d.m3b_connectivity4, a.m3c_maximum_water_depth, e.m3d_duration_inundation_saturation1, e.m3d_duration_inundation_saturation2, f.m3e_modifications_to_hydrologic_regime1, f.m3e_modifications_to_hydrologic_regime2, i.disturbances_hydro1, i.disturbances_hydro2, i.disturbances_hydro3, i.disturbances_hydro4, i.disturbances_hydro5, i.disturbances_hydro6, i.disturbances_hydro7, i.disturbances_hydro8, i.disturbances_hydro9, i.disturbances_hydro10, g.m4a_substrate_disturbance1, g.m4a_substrate_disturbance2, a.m4b_habitat_development, h.m4c_habitat_alteration1, h.m4c_habitat_alteration2, j.disturbances_substrate1, j.disturbances_substrate2, j.disturbances_substrate3, j.disturbances_substrate4, j.disturbances_substrate5, j.disturbances_substrate6, j.disturbances_substrate7, j.disturbances_substrate8, j.disturbances_substrate9, j.disturbances_substrate10, j.disturbances_substrate11, j.disturbances_substrate12, a.disturbances_substrate_other, k.m5_special_wetlands1, k.m5_special_wetlands2, a.m6a_aquatic_bed, a.m6a_emergent, a.m6a_shrub, a.m6a_forest, a.m6a_mudflats, a.m6a_open_water, a.m6a_other, a.m6b_horizontal_plan_view_interspersion, a.m6c_coverage_of_invasive_plants, a.m6d_microtopography_vegetation_hummuckstussuck, a.m6d_microtopography_course_woody_debris_15cm_6in, a.m6d_microtopography_standing_dead_25cm_10in_dbh, a.m6d_microtopography_amphibian_breeding_pools FROM wetland.oram_v2 a LEFT JOIN metric2b_split b ON a.fulcrum_id = b.fulcrum_id LEFT JOIN metric3a_split c ON a.fulcrum_id = c.fulcrum_id LEFT JOIN metric3b_split d ON a.fulcrum_id = d.fulcrum_id LEFT JOIN metric3d_split e ON a.fulcrum_id = e.fulcrum_id LEFT JOIN metric3e_split f ON a.fulcrum_id = f.fulcrum_id LEFT JOIN metric4a_split g ON a.fulcrum_id = g.fulcrum_id LEFT JOIN metric4c_split h ON a.fulcrum_id = h.fulcrum_id LEFT JOIN disturbances_hydro_split i ON a.fulcrum_id = i.fulcrum_id LEFT JOIN disturbances_substrate_split j ON a.fulcrum_id = j.fulcrum_id LEFT JOIN metric5_split k ON a.fulcrum_id = k.fulcrum_id),
 
-ins34 AS (INSERT INTO wetland_census.oram_photos_caption_norm SELECT oram_id, photos_caption FROM oram_photos_caption
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_photos_caption_norm WHERE oram_id = oram_photos_caption.oram_id AND photos_caption = oram_photos_caption.photos_caption
-	)AND oram_photos_caption.photos_caption IS NOT NULL)
 
-INSERT INTO wetland_census.oram_photos_url_norm SELECT oram_id, photos_url FROM oram_photos_url
-WHERE NOT EXISTS
-	(
-	SELECT 1 FROM wetland_census.oram_photos_url_norm WHERE oram_id = oram_photos_url.oram_id AND photos_url = oram_photos_url.photos_url
-	)AND oram_photos_url.photos_url IS NOT NULL
+id_insert AS (INSERT INTO wetland.oram_ids SELECT reservation, polygon_number, fulcrum_id FROM poly_split
+ON CONFLICT (reservation, polygon_number, fulcrum_id) DO NOTHING),
+
+metric_upsert AS (INSERT INTO wetland.oram_metrics SELECT * FROM joined ON CONFLICT (fulcrum_id) DO UPDATE SET
+
+  metric1_selection = EXCLUDED.metric1_selection,
+  metric2a_selection = EXCLUDED.metric2a_selection,
+  metric2b_selection1 = EXCLUDED.metric2b_selection1,
+  metric2b_selection2 = EXCLUDED.metric2b_selection2,
+  metric3a_selection1 = EXCLUDED.metric3a_selection1,
+  metric3a_selection2 = EXCLUDED.metric3a_selection2,
+  metric3a_selection3 = EXCLUDED.metric3a_selection3,
+  metric3a_selection4 = EXCLUDED.metric3a_selection4,
+  metric3a_selection5 = EXCLUDED.metric3a_selection5,
+  metric3b_selection1 = EXCLUDED.metric3b_selection1,
+  metric3b_selection2 = EXCLUDED.metric3b_selection2,
+  metric3b_selection3 = EXCLUDED.metric3b_selection3,
+  metric3b_selection4 = EXCLUDED.metric3b_selection4,
+  metric3c_selection = EXCLUDED.metric3c_selection,
+  metric3d_selection1 = EXCLUDED.metric3d_selection1,
+  metric3d_selection2 = EXCLUDED.metric3d_selection2,
+  metric3e_selection1 = EXCLUDED.metric3e_selection1,
+  metric3e_selection2 = EXCLUDED.metric3e_selection2,
+  hydro_disturbance1 = EXCLUDED.hydro_disturbance1,
+  hydro_disturbance2 = EXCLUDED.hydro_disturbance2,
+  hydro_disturbance3 = EXCLUDED.hydro_disturbance3,
+  hydro_disturbance4 = EXCLUDED.hydro_disturbance4,
+  hydro_disturbance5 = EXCLUDED.hydro_disturbance5,
+  hydro_disturbance6 = EXCLUDED.hydro_disturbance6,
+  hydro_disturbance7 = EXCLUDED.hydro_disturbance7,
+  hydro_disturbance8 = EXCLUDED.hydro_disturbance8,
+  hydro_disturbance9 = EXCLUDED.hydro_disturbance9,
+  hydro_disturbance_other = EXCLUDED.hydro_disturbance_other,
+  metric4a_selection1 = EXCLUDED.metric4a_selection1,
+  metric4a_selection2 = EXCLUDED.metric4a_selection2,
+  metric4b_selection = EXCLUDED.metric4b_selection,
+  metric4c_selection1 = EXCLUDED.metric4c_selection1,
+  metric4c_selection2 = EXCLUDED.metric4c_selection2,
+  habitat_disturbance1 = EXCLUDED.habitat_disturbance1,
+  habitat_disturbance2 = EXCLUDED.habitat_disturbance2,
+  habitat_disturbance3 = EXCLUDED.habitat_disturbance3,
+  habitat_disturbance4 = EXCLUDED.habitat_disturbance4,
+  habitat_disturbance5 = EXCLUDED.habitat_disturbance5,
+  habitat_disturbance6 = EXCLUDED.habitat_disturbance6,
+  habitat_disturbance7 = EXCLUDED.habitat_disturbance7,
+  habitat_disturbance8 = EXCLUDED.habitat_disturbance8,
+  habitat_disturbance9 = EXCLUDED.habitat_disturbance9,
+  habitat_disturbance10 = EXCLUDED.habitat_disturbance10,
+  habitat_disturbance11 = EXCLUDED.habitat_disturbance11,
+  habitat_disturbance12 = EXCLUDED.habitat_disturbance12,
+  habitat_disturbance_other = EXCLUDED.habitat_disturbance_other,
+  metric5_selection1 = EXCLUDED.metric5_selection1,
+  metric5_selection2 = EXCLUDED.metric5_selection2,
+  metric6a1_aquatic_bed = EXCLUDED.metric6a1_aquatic_bed,
+  metric6a2_emergent = EXCLUDED.metric6a2_emergent,
+  metric6a3_shrub = EXCLUDED.metric6a3_shrub,
+  metric6a4_forest = EXCLUDED.metric6a4_forest,
+  metric6a5_mudflats = EXCLUDED.metric6a5_mudflats,
+  metric6a6_open_water = EXCLUDED.metric6a6_open_water,
+  metric6a_other1 = EXCLUDED.metric6a_other1,
+  metric6b_selection = EXCLUDED.metric6b_selection,
+  metric6c_selection = EXCLUDED.metric6c_selection,
+  metric6d1_selection = EXCLUDED.metric6d1_selection,
+  metric6d2_selection = EXCLUDED.metric6d2_selection,
+  metric6d3_selection = EXCLUDED.metric6d3_selection,
+  metric6d4_selection = EXCLUDED.metric6d4_selection
+  )
+
+
+DELETE FROM wetland.oram_ids WHERE fulcrum_id NOT IN (SELECT DISTINCT fulcrum_id FROM wetland.oram_v2)
+
 ;
 
 RETURN NEW;
-END 
+END $$;
+
+
+ALTER FUNCTION wetland.oram_upsert() OWNER TO postgres;
+
+--
+-- TOC entry 2012 (class 1255 OID 652055)
+-- Name: refresh_wetland_materialized_views(); Type: FUNCTION; Schema: wetland; Owner: jreinier
+--
+
+CREATE FUNCTION refresh_wetland_materialized_views() RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram WITH DATA;
+  REFRESH MATERIALIZED VIEW wwetland.cm_wetland_class_oram_avg WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_max WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_avg_landform_updated WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_avg_landform_updated_merge WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_avg_landform_updated_merge_simplified WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_landform_updated WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_landform_updated_merge WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_landform_updated_merge_simplified WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_max_landform_updated WITH DATA;
+  REFRESH MATERIALIZED VIEW rwetland.cm_wetland_class_oram_max_landform_updated_merge WITH DATA;
+  REFRESH MATERIALIZED VIEW wetland.cm_wetland_class_oram_max_landform_updated_merge_simplified WITH DATA;
+END;
 $$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_metric_insert_all() OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_oram_data | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_oram_data CASCADE;
-CREATE TABLE wetland_census.cm_oram_data(
-	fulcrum_id text,
-	created_at timestamp,
-	updated_at timestamp,
-	created_by text,
-	updated_by text,
-	system_created_at timestamp,
-	system_updated_at timestamp,
-	version bigint,
-	status text,
-	project text,
-	assigned_to text,
-	latitude numeric,
-	longitude numeric,
-	geometry geometry,
-	reservation text,
-	polygon_id text,
-	oram_id text NOT NULL,
-	date text,
-	data_recorded_by_initials text,
-	m1_wetland_area text,
-	m2a_upland_buffer_width text,
-	m2b_surrounding_land_use text,
-	m3a_sources_of_water text,
-	m3b_connectivity text,
-	m3c_maximum_water_depth text,
-	m3d_duration_inundation_saturation text,
-	m3e_modifications_to_hydrologic_regime text,
-	disturbances_hydro text,
-	disturbances_hydro_other text,
-	m4a_substrate_disturbance text,
-	m4b_habitat_development text,
-	m4c_habitat_alteration text,
-	disturbances_substrate text,
-	disturbances_substrate_other text,
-	m6a_aquatic_bed text,
-	m6a_emergent text,
-	m6a_shrub text,
-	m6a_forest text,
-	m6a_mudflats text,
-	m6a_open_water text,
-	m6a_other text,
-	m6a_other_list text,
-	m6b_horizontal_plan_view_interspersion text,
-	m6c_coverage_of_invasive_plants text,
-	m6d_microtopography_vegetation_hummuckstussuck text,
-	m6d_microtopography_course_woody_debris_15cm_6in text,
-	m6d_microtopography_standing_dead_25cm_10in_dbh text,
-	m6d_microtopography_amphibian_breeding_pools text,
-	m5_special_wetlands text,
-	photos text,
-	photos_caption text,
-	photos_url text,
-	CONSTRAINT cm_oram_data_pkey PRIMARY KEY (oram_id)
 
+ALTER FUNCTION wetland.refresh_wetland_materialized_views() OWNER TO jreinier;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- TOC entry 712 (class 1259 OID 652062)
+-- Name: classification_dominant_species; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE classification_dominant_species (
+    fulcrum_id character varying(100) NOT NULL,
+    sp1 text,
+    sp2 text,
+    sp3 text,
+    sp4 text,
+    sp5 text,
+    sp6 text,
+    sp7 text,
+    sp8 text,
+    sp9 text,
+    sp10 text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_oram_data OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_oram_data_photos | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_oram_data_photos CASCADE;
-CREATE TABLE wetland_census.cm_oram_data_photos(
-	fulcrum_id text,
-	fulcrum_parent_id text,
-	fulcrum_record_id text,
-	version bigint,
-	caption text,
-	latitude double precision,
-	longitude double precision,
-	geometry geometry,
-	file_size bigint,
-	uploaded_at timestamp,
-	exif_date_time text,
-	exif_gps_altitude text,
-	exif_gps_date_stamp text,
-	exif_gps_time_stamp text,
-	exif_gps_dop text,
-	exif_gps_img_direction text,
-	exif_gps_img_direction_ref text,
-	exif_gps_latitude text,
-	exif_gps_latitude_ref text,
-	exif_gps_longitude text,
-	exif_gps_longitude_ref text,
-	exif_make text,
-	exif_model text,
-	exif_orientation text,
-	exif_pixel_x_dimension text,
-	exif_pixel_y_dimension text,
-	exif_software text,
-	exif_x_resolution text,
-	exif_y_resolution text
+
+ALTER TABLE classification_dominant_species OWNER TO jreinier;
+
+--
+-- TOC entry 713 (class 1259 OID 652074)
+-- Name: classification_id; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE classification_id (
+    polygon_number text,
+    reservation text,
+    classification_level text,
+    fulcrum_id character varying(100) NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_oram_data_photos OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_classification_id | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_id CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_id(
-	polygon_id text,
-	reservation text,
-	classification_level text,
-	classification_id bigint NOT NULL,
-	fulcrum_id character varying(100),
-	CONSTRAINT cm_wetland_classification_id_pkey PRIMARY KEY (classification_id)
 
+ALTER TABLE classification_id OWNER TO jreinier;
+
+--
+-- TOC entry 714 (class 1259 OID 652092)
+-- Name: cm_oram_data; Type: TABLE; Schema: wetland; Owner: postgres
+--
+
+CREATE TABLE cm_oram_data (
+    fulcrum_id text,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    created_by text,
+    updated_by text,
+    system_created_at timestamp without time zone,
+    system_updated_at timestamp without time zone,
+    version bigint,
+    status text,
+    project text,
+    assigned_to text,
+    latitude numeric,
+    longitude numeric,
+    geometry public.geometry,
+    reservation text,
+    polygon_id text,
+    oram_id text NOT NULL,
+    date text,
+    data_recorded_by_initials text,
+    m1_wetland_area text,
+    m2a_upland_buffer_width text,
+    m2b_surrounding_land_use text,
+    m3a_sources_of_water text,
+    m3b_connectivity text,
+    m3c_maximum_water_depth text,
+    m3d_duration_inundation_saturation text,
+    m3e_modifications_to_hydrologic_regime text,
+    disturbances_hydro text,
+    disturbances_hydro_other text,
+    m4a_substrate_disturbance text,
+    m4b_habitat_development text,
+    m4c_habitat_alteration text,
+    disturbances_substrate text,
+    disturbances_substrate_other text,
+    m6a_aquatic_bed text,
+    m6a_emergent text,
+    m6a_shrub text,
+    m6a_forest text,
+    m6a_mudflats text,
+    m6a_open_water text,
+    m6a_other text,
+    m6a_other_list text,
+    m6b_horizontal_plan_view_interspersion text,
+    m6c_coverage_of_invasive_plants text,
+    m6d_microtopography_vegetation_hummuckstussuck text,
+    m6d_microtopography_course_woody_debris_15cm_6in text,
+    m6d_microtopography_standing_dead_25cm_10in_dbh text,
+    m6d_microtopography_amphibian_breeding_pools text,
+    m5_special_wetlands text,
+    photos text,
+    photos_caption text,
+    photos_url text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_id OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_cowardin_classification | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_cowardin_classification CASCADE;
-CREATE TABLE wetland_census.cm_wetland_cowardin_classification(
-	classification_id bigint NOT NULL,
-	cowardin_classification text NOT NULL,
-	CONSTRAINT cm_wetland_cowardin_classification_pkey PRIMARY KEY (cowardin_classification,classification_id)
 
+ALTER TABLE cm_oram_data OWNER TO postgres;
+
+--
+-- TOC entry 720 (class 1259 OID 652140)
+-- Name: cm_wetland_classification_to_fulcrum_format; Type: TABLE; Schema: wetland; Owner: postgres
+--
+
+CREATE TABLE cm_wetland_classification_to_fulcrum_format (
+    fulcrum_id text,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    created_by text,
+    updated_by text,
+    system_created_at timestamp without time zone,
+    system_updated_at timestamp without time zone,
+    version bigint,
+    status text,
+    project text,
+    assigned_to text,
+    latitude numeric,
+    longitude numeric,
+    eight_digit_huc text,
+    twelve_digit_huc text,
+    geometry public.geometry,
+    polygon_id text,
+    reservation text,
+    data_recorded_by_initials text,
+    classification_level text,
+    plant_community text,
+    plant_community_other text,
+    landscape_position text,
+    inland_landform text,
+    water_flow_path text,
+    llww_modifiers text,
+    cowardin_classification text,
+    cowardin_water_regime text,
+    cowardin_special_modifier text,
+    sp1 text,
+    sp2 text,
+    sp3 text,
+    sp4 text,
+    sp5 text,
+    sp6 text,
+    sp7 text,
+    sp8 text,
+    sp9 text,
+    sp10 text,
+    classification_id bigint NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_cowardin_classification OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_cowardin_special_modifier | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_cowardin_special_modifier CASCADE;
-CREATE TABLE wetland_census.cm_wetland_cowardin_special_modifier(
-	classification_id bigint NOT NULL,
-	cowardin_special_modifier text NOT NULL,
-	CONSTRAINT cm_wetland_cowardin_special_modifier_pkey PRIMARY KEY (cowardin_special_modifier,classification_id)
 
+ALTER TABLE cm_wetland_classification_to_fulcrum_format OWNER TO postgres;
+
+--
+-- TOC entry 715 (class 1259 OID 652104)
+-- Name: cm_wetlands; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE cm_wetlands (
+    polygon_number text NOT NULL,
+    reservation text NOT NULL,
+    geom public.geometry(MultiPolygon),
+    area_acres numeric,
+    poly_type character varying(20)
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_cowardin_water_regime | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_cowardin_water_regime CASCADE;
-CREATE TABLE wetland_census.cm_wetland_cowardin_water_regime(
-	classification_id bigint NOT NULL,
-	cowardin_water_regime text NOT NULL,
-	CONSTRAINT cm_wetland_cowardin_water_regime_pkey PRIMARY KEY (cowardin_water_regime,classification_id)
 
+ALTER TABLE cm_wetlands OWNER TO jreinier;
+
+--
+-- TOC entry 721 (class 1259 OID 652146)
+-- Name: cowardin_classification; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE cowardin_classification (
+    fulcrum_id character varying(100) NOT NULL,
+    system text,
+    class text,
+    subclass text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_cowardin_water_regime OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_inland_landform_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_inland_landform_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_inland_landform_norm(
-	classification_id bigint NOT NULL,
-	inland_landform text NOT NULL,
-	CONSTRAINT cm_wetland_inland_landform_norm_pkey PRIMARY KEY (inland_landform,classification_id)
 
+ALTER TABLE cowardin_classification OWNER TO jreinier;
+
+--
+-- TOC entry 722 (class 1259 OID 652152)
+-- Name: cowardin_special_modifiers; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE cowardin_special_modifiers (
+    fulcrum_id character varying(100) NOT NULL,
+    mod_one text,
+    mod_two text,
+    mod_three text,
+    mod_four text,
+    mod_five text,
+    mod_six text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_inland_landform_norm OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_landscape_position_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_landscape_position_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_landscape_position_norm(
-	classification_id bigint NOT NULL,
-	landscape_position text NOT NULL,
-	CONSTRAINT cm_wetland_landscape_position_norm_pkey PRIMARY KEY (landscape_position,classification_id)
 
+ALTER TABLE cowardin_special_modifiers OWNER TO jreinier;
+
+--
+-- TOC entry 723 (class 1259 OID 652158)
+-- Name: cowardin_water_regime; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE cowardin_water_regime (
+    fulcrum_id character varying(100) NOT NULL,
+    cowardin_water_regime text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_landscape_position_norm OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_llww_modifiers | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_llww_modifiers CASCADE;
-CREATE TABLE wetland_census.cm_wetland_llww_modifiers(
-	classification_id bigint NOT NULL,
-	llww_modifiers text NOT NULL,
-	CONSTRAINT cm_wetland_llww_modifiers_pkey PRIMARY KEY (llww_modifiers,classification_id)
 
+ALTER TABLE cowardin_water_regime OWNER TO jreinier;
+
+--
+-- TOC entry 724 (class 1259 OID 652164)
+-- Name: inland_landform; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE inland_landform (
+    fulcrum_id character varying(100) NOT NULL,
+    inland_landform text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_llww_modifiers OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric1_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric1_value CASCADE;
-CREATE TABLE wetland_census.metric1_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric1_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric1_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE inland_landform OWNER TO jreinier;
+
+--
+-- TOC entry 725 (class 1259 OID 652170)
+-- Name: landscape_position; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE landscape_position (
+    fulcrum_id character varying(100) NOT NULL,
+    landscape_position text,
+    modifier_one text,
+    modifier_two text,
+    modifier_three text
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric1_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric2a_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric2a_value CASCADE;
-CREATE TABLE wetland_census.metric2a_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric2a_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric2a_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE landscape_position OWNER TO jreinier;
+
+--
+-- TOC entry 726 (class 1259 OID 652176)
+-- Name: llww_modifiers; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE llww_modifiers (
+    fulcrum_id character varying(100) NOT NULL,
+    mod_one text,
+    mod_two text,
+    mod_three text,
+    mod_four text,
+    mod_five text
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric2a_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric2b_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric2b_value CASCADE;
-CREATE TABLE wetland_census.metric2b_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric2b_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric2b_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE llww_modifiers OWNER TO jreinier;
+
+--
+-- TOC entry 745 (class 1259 OID 654655)
+-- Name: lookup_cowardin_class; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE lookup_cowardin_class (
+    class text NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric2b_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric3a_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3a_value CASCADE;
-CREATE TABLE wetland_census.metric3a_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric3a_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric3a_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE lookup_cowardin_class OWNER TO jreinier;
+
+--
+-- TOC entry 746 (class 1259 OID 654668)
+-- Name: lookup_cowardin_subclass; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE lookup_cowardin_subclass (
+    subclass text NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric3a_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric3b_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3b_value CASCADE;
-CREATE TABLE wetland_census.metric3b_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric3b_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric3b_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE lookup_cowardin_subclass OWNER TO jreinier;
+
+--
+-- TOC entry 744 (class 1259 OID 654629)
+-- Name: lookup_cowardin_system; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE lookup_cowardin_system (
+    system text NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric3b_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric3c_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3c_value CASCADE;
-CREATE TABLE wetland_census.metric3c_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric3c_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric3c_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE lookup_cowardin_system OWNER TO jreinier;
+
+--
+-- TOC entry 727 (class 1259 OID 652188)
+-- Name: oram_ids; Type: TABLE; Schema: wetland; Owner: jreinier
+--
+
+CREATE TABLE oram_ids (
+    reservation text NOT NULL,
+    polygon_number text NOT NULL,
+    fulcrum_id character varying(100) NOT NULL
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric3c_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric3d_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3d_value CASCADE;
-CREATE TABLE wetland_census.metric3d_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric3d_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric3d_value_pkey PRIMARY KEY (oram_id,selection)
 
+ALTER TABLE oram_ids OWNER TO jreinier;
+
+--
+-- TOC entry 716 (class 1259 OID 652110)
+-- Name: oram_v2; Type: TABLE; Schema: wetland; Owner: postgres
+--
+
+CREATE TABLE oram_v2 (
+    fulcrum_id character varying(100) NOT NULL,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    created_by text,
+    updated_by text,
+    system_created_at timestamp without time zone,
+    system_updated_at timestamp without time zone,
+    version bigint,
+    status text,
+    project text,
+    assigned_to text,
+    latitude double precision,
+    longitude double precision,
+    geometry public.geometry(Point,4326),
+    reservation text,
+    polygon_id text,
+    date text,
+    data_recorded_by_initials text,
+    m1_wetland_area text,
+    m2a_upland_buffer_width text,
+    m2b_surrounding_land_use text,
+    m3a_sources_of_water text,
+    m3b_connectivity text,
+    m3c_maximum_water_depth text,
+    m3d_duration_inundation_saturation text,
+    m3e_modifications_to_hydrologic_regime text,
+    disturbances_hydro text,
+    m4a_substrate_disturbance text,
+    m4b_habitat_development text,
+    m4c_habitat_alteration text,
+    disturbances_substrate text,
+    disturbances_substrate_other text,
+    m6a_aquatic_bed text,
+    m6a_emergent text,
+    m6a_shrub text,
+    m6a_forest text,
+    m6a_mudflats text,
+    m6a_open_water text,
+    m6a_other text,
+    m6a_other_list text,
+    m6b_horizontal_plan_view_interspersion text,
+    m6c_coverage_of_invasive_plants text,
+    m6d_microtopography_vegetation_hummuckstussuck text,
+    m6d_microtopography_course_woody_debris_15cm_6in text,
+    m6d_microtopography_standing_dead_25cm_10in_dbh text,
+    m6d_microtopography_amphibian_breeding_pools text,
+    m5_special_wetlands text,
+    notes text,
+    photos text,
+    photos_caption text,
+    photos_url text
 );
--- ddl-end --
-ALTER TABLE wetland_census.metric3d_value OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.metric3e_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3e_value CASCADE;
-CREATE TABLE wetland_census.metric3e_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric3e_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric3e_value_pkey PRIMARY KEY (oram_id,selection)
 
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3e_value OWNER TO postgres;
--- ddl-end --
+ALTER TABLE oram_v2 OWNER TO postgres;
 
--- object: wetland_census.metric4a_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4a_value CASCADE;
-CREATE TABLE wetland_census.metric4a_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric4a_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric4a_value_pkey PRIMARY KEY (oram_id,selection)
+--
+-- TOC entry 717 (class 1259 OID 652116)
+-- Name: oram_metric_values; Type: VIEW; Schema: wetland; Owner: jreinier
+--
 
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4a_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric4b_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4b_value CASCADE;
-CREATE TABLE wetland_census.metric4b_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric4b_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric4b_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4b_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric4c_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4c_value CASCADE;
-CREATE TABLE wetland_census.metric4c_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric4c_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric4c_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4c_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric5_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric5_value CASCADE;
-CREATE TABLE wetland_census.metric5_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric5_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric5_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric5_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a1_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a1_value CASCADE;
-CREATE TABLE wetland_census.metric6a1_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a1_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a1_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a1_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a2_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a2_value CASCADE;
-CREATE TABLE wetland_census.metric6a2_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a2_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a2_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a2_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a3_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a3_value CASCADE;
-CREATE TABLE wetland_census.metric6a3_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a3_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a3_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a3_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a4_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a4_value CASCADE;
-CREATE TABLE wetland_census.metric6a4_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a4_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a4_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a4_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a5_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a5_value CASCADE;
-CREATE TABLE wetland_census.metric6a5_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a5_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a5_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a5_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a6_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a6_value CASCADE;
-CREATE TABLE wetland_census.metric6a6_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a6_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a6_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a6_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a7_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a7_value CASCADE;
-CREATE TABLE wetland_census.metric6a7_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6a7_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6a7_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a7_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6b_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6b_value CASCADE;
-CREATE TABLE wetland_census.metric6b_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6b_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6b_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6b_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6c_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6c_value CASCADE;
-CREATE TABLE wetland_census.metric6c_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6c_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6c_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6c_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d1_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d1_value CASCADE;
-CREATE TABLE wetland_census.metric6d1_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6d1_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6d1_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d1_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d2_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d2_value CASCADE;
-CREATE TABLE wetland_census.metric6d2_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6d2_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6d2_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d2_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d3_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d3_value CASCADE;
-CREATE TABLE wetland_census.metric6d3_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6d3_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6d3_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d3_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d4_value | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d4_value CASCADE;
-CREATE TABLE wetland_census.metric6d4_value(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	metric6d4_value numeric,
-	lookup_id integer,
-	CONSTRAINT metric6d4_value_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d4_value OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_oram_calcs | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.cm_wetland_oram_calcs CASCADE;
-CREATE VIEW wetland_census.cm_wetland_oram_calcs
-AS 
-
-WITH metric1 AS (
-         SELECT metric1_value.oram_id,
-            avg(metric1_value.metric1_value) AS metric1_score
-           FROM metric1_value
-          GROUP BY metric1_value.oram_id
-        ), metric2a AS (
-         SELECT metric2a_value.oram_id,
-            avg(metric2a_value.metric2a_value) AS metric2a_score
-           FROM metric2a_value
-          GROUP BY metric2a_value.oram_id
-        ), metric2b AS (
-         SELECT metric2b_value.oram_id,
-            avg(metric2b_value.metric2b_value) AS metric2b_score
-           FROM metric2b_value
-          GROUP BY metric2b_value.oram_id
-        ), metric3a AS (
-         SELECT metric3a_value.oram_id,
-            sum(metric3a_value.metric3a_value) AS metric3a_score
-           FROM metric3a_value
-          GROUP BY metric3a_value.oram_id
-        ), metric3b AS (
-         SELECT metric3b_value.oram_id,
-            sum(metric3b_value.metric3b_value) AS metric3b_score
-           FROM metric3b_value
-          GROUP BY metric3b_value.oram_id
-        ), metric3c AS (
-         SELECT metric3c_value.oram_id,
-            avg(metric3c_value.metric3c_value) AS metric3c_score
-           FROM metric3c_value
-          GROUP BY metric3c_value.oram_id
-        ), metric3d AS (
-         SELECT metric3d_value.oram_id,
-            avg(metric3d_value.metric3d_value) AS metric3d_score
-           FROM metric3d_value
-          GROUP BY metric3d_value.oram_id
-        ), metric3e AS (
-         SELECT metric3e_value.oram_id,
-            avg(metric3e_value.metric3e_value) AS metric3e_score
-           FROM metric3e_value
-          GROUP BY metric3e_value.oram_id
-        ), metric4a AS (
-         SELECT metric4a_value.oram_id,
-            avg(metric4a_value.metric4a_value) AS metric4a_score
-           FROM metric4a_value
-          GROUP BY metric4a_value.oram_id
-        ), metric4b AS (
-         SELECT metric4b_value.oram_id,
-            avg(metric4b_value.metric4b_value) AS metric4b_score
-           FROM metric4b_value
-          GROUP BY metric4b_value.oram_id
-        ), metric4c AS (
-         SELECT metric4c_value.oram_id,
-            avg(metric4c_value.metric4c_value) AS metric4c_score
-           FROM metric4c_value
-          GROUP BY metric4c_value.oram_id
-        ), metric5 AS (
-         SELECT metric5_value.oram_id,
-            avg(metric5_value.metric5_value) AS metric5_score
-           FROM metric5_value
-          GROUP BY metric5_value.oram_id
-        ), metric6a1 AS (
-         SELECT metric6a1_value.oram_id,
-            avg(metric6a1_value.metric6a1_value) AS metric6a1_score
-           FROM metric6a1_value
-          GROUP BY metric6a1_value.oram_id
-        ), metric6a2 AS (
-         SELECT metric6a2_value.oram_id,
-            avg(metric6a2_value.metric6a2_value) AS metric6a2_score
-           FROM metric6a2_value
-          GROUP BY metric6a2_value.oram_id
-        ), metric6a3 AS (
-         SELECT metric6a3_value.oram_id,
-            avg(metric6a3_value.metric6a3_value) AS metric6a3_score
-           FROM metric6a3_value
-          GROUP BY metric6a3_value.oram_id
-        ), metric6a4 AS (
-         SELECT metric6a4_value.oram_id,
-            avg(metric6a4_value.metric6a4_value) AS metric6a4_score
-           FROM metric6a4_value
-          GROUP BY metric6a4_value.oram_id
-        ), metric6a5 AS (
-         SELECT metric6a5_value.oram_id,
-            avg(metric6a5_value.metric6a5_value) AS metric6a5_score
-           FROM metric6a5_value
-          GROUP BY metric6a5_value.oram_id
-        ), metric6a6 AS (
-         SELECT metric6a6_value.oram_id,
-            avg(metric6a6_value.metric6a6_value) AS metric6a6_score
-           FROM metric6a6_value
-          GROUP BY metric6a6_value.oram_id
-        ), metric6a7 AS (
-         SELECT metric6a7_value.oram_id,
-            avg(metric6a7_value.metric6a7_value) AS metric6a7_score
-           FROM metric6a7_value
-          GROUP BY metric6a7_value.oram_id
-        ), metric6b AS (
-         SELECT metric6b_value.oram_id,
-            avg(metric6b_value.metric6b_value) AS metric6b_score
-           FROM metric6b_value
-          GROUP BY metric6b_value.oram_id
-        ), metric6c AS (
-         SELECT metric6c_value.oram_id,
-            avg(metric6c_value.metric6c_value) AS metric6c_score
-           FROM metric6c_value
-          GROUP BY metric6c_value.oram_id
-        ), metric6d1 AS (
-         SELECT metric6d1_value.oram_id,
-            avg(metric6d1_value.metric6d1_value) AS metric6d1_score
-           FROM metric6d1_value
-          GROUP BY metric6d1_value.oram_id
-        ), metric6d2 AS (
-         SELECT metric6d2_value.oram_id,
-            avg(metric6d2_value.metric6d2_value) AS metric6d2_score
-           FROM metric6d2_value
-          GROUP BY metric6d2_value.oram_id
-        ), metric6d3 AS (
-         SELECT metric6d3_value.oram_id,
-            avg(metric6d3_value.metric6d3_value) AS metric6d3_score
-           FROM metric6d3_value
-          GROUP BY metric6d3_value.oram_id
-        ), metric6d4 AS (
-         SELECT metric6d4_value.oram_id,
-            avg(metric6d4_value.metric6d4_value) AS metric6d4_score
-           FROM metric6d4_value
-          GROUP BY metric6d4_value.oram_id
+CREATE VIEW oram_metric_values AS
+ WITH metric2b_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m2b_surrounding_land_use, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m2b_surrounding_land_use, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), metric3a_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m3a_sources_of_water, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m3a_sources_of_water, ','::text, 2), ''::text) AS selection2,
+            NULLIF(split_part(oram_v2.m3a_sources_of_water, ','::text, 3), ''::text) AS selection3,
+            NULLIF(split_part(oram_v2.m3a_sources_of_water, ','::text, 4), ''::text) AS selection4,
+            NULLIF(split_part(oram_v2.m3a_sources_of_water, ','::text, 5), ''::text) AS selection5
+           FROM oram_v2
+        ), metric3b_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m3b_connectivity, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m3b_connectivity, ','::text, 2), ''::text) AS selection2,
+            NULLIF(split_part(oram_v2.m3b_connectivity, ','::text, 3), ''::text) AS selection3,
+            NULLIF(split_part(oram_v2.m3b_connectivity, ','::text, 4), ''::text) AS selection4
+           FROM oram_v2
+        ), metric3d_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m3d_duration_inundation_saturation, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m3d_duration_inundation_saturation, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), metric3e_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m3e_modifications_to_hydrologic_regime, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m3e_modifications_to_hydrologic_regime, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), metric4a_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m4a_substrate_disturbance, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m4a_substrate_disturbance, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), metric4c_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m4c_habitat_alteration, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m4c_habitat_alteration, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), metric5_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.m5_special_wetlands, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.m5_special_wetlands, ','::text, 2), ''::text) AS selection2
+           FROM oram_v2
+        ), disturbances_hydro_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 2), ''::text) AS selection2,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 3), ''::text) AS selection3,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 4), ''::text) AS selection4,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 5), ''::text) AS selection5,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 6), ''::text) AS selection6,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 7), ''::text) AS selection7,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 8), ''::text) AS selection8,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 9), ''::text) AS selection9,
+            NULLIF(split_part(oram_v2.disturbances_hydro, ','::text, 10), ''::text) AS selection10
+           FROM oram_v2
+        ), disturbances_substrate_split AS (
+         SELECT oram_v2.fulcrum_id,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 1), ''::text) AS selection1,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 2), ''::text) AS selection2,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 3), ''::text) AS selection3,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 4), ''::text) AS selection4,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 5), ''::text) AS selection5,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 6), ''::text) AS selection6,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 7), ''::text) AS selection7,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 8), ''::text) AS selection8,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 9), ''::text) AS selection9,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 10), ''::text) AS selection10,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 11), ''::text) AS selection11,
+            NULLIF(split_part(oram_v2.disturbances_substrate, ','::text, 12), ''::text) AS selection12
+           FROM oram_v2
         )
- SELECT metric1.oram_id,
-    metric1.metric1_score,
-    metric2a.metric2a_score,
-    metric2b.metric2b_score,
-    metric3a.metric3a_score,
-    metric3b.metric3b_score,
-    metric3c.metric3c_score,
-    metric3d.metric3d_score,
-    metric3e.metric3e_score,
-    metric4a.metric4a_score,
-    metric4b.metric4b_score,
-    metric4c.metric4c_score,
-        CASE
-            WHEN (metric5.metric5_score > (10)::numeric) THEN (10)::numeric
-            ELSE metric5.metric5_score
-        END AS metric5_score,
-    metric6a1.metric6a1_score,
-    metric6a2.metric6a2_score,
-    metric6a3.metric6a3_score,
-    metric6a4.metric6a4_score,
-    metric6a5.metric6a5_score,
-    metric6a6.metric6a6_score,
-    metric6a7.metric6a7_score,
-    metric6b.metric6b_score,
-    metric6c.metric6c_score,
-    metric6d1.metric6d1_score,
-    metric6d2.metric6d2_score,
-    metric6d3.metric6d3_score,
-    metric6d4.metric6d4_score,
-    ((((((((((((((((((((((((metric1.metric1_score + metric2a.metric2a_score) + metric2b.metric2b_score) + metric3a.metric3a_score) + COALESCE(metric3b.metric3b_score, (0)::numeric)) + metric3c.metric3c_score) + metric3d.metric3d_score) + metric3e.metric3e_score) + metric4a.metric4a_score) + metric4b.metric4b_score) + metric4c.metric4c_score) + COALESCE(metric5.metric5_score, (0)::numeric)) + COALESCE(metric6a1.metric6a1_score, (0)::numeric)) + COALESCE(metric6a2.metric6a2_score, (0)::numeric)) + COALESCE(metric6a3.metric6a3_score, (0)::numeric)) + COALESCE(metric6a4.metric6a4_score, (0)::numeric)) + COALESCE(metric6a5.metric6a5_score, (0)::numeric)) + COALESCE(metric6a6.metric6a6_score, (0)::numeric)) + COALESCE(metric6a7.metric6a7_score, (0)::numeric)) + metric6b.metric6b_score) + metric6c.metric6c_score) + COALESCE(metric6d1.metric6d1_score, (0)::numeric)) + COALESCE(metric6d2.metric6d2_score, (0)::numeric)) + COALESCE(metric6d3.metric6d3_score, (0)::numeric)) + COALESCE(metric6d4.metric6d4_score, (0)::numeric)) AS grand_total
-   FROM ((((((((((((((((((((((((metric1
-     LEFT JOIN metric2a ON ((metric1.oram_id = metric2a.oram_id)))
-     LEFT JOIN metric2b ON ((metric1.oram_id = metric2b.oram_id)))
-     LEFT JOIN metric3a ON ((metric1.oram_id = metric3a.oram_id)))
-     LEFT JOIN metric3b ON ((metric1.oram_id = metric3b.oram_id)))
-     LEFT JOIN metric3c ON ((metric1.oram_id = metric3c.oram_id)))
-     LEFT JOIN metric3d ON ((metric1.oram_id = metric3d.oram_id)))
-     LEFT JOIN metric3e ON ((metric1.oram_id = metric3e.oram_id)))
-     LEFT JOIN metric4a ON ((metric1.oram_id = metric4a.oram_id)))
-     LEFT JOIN metric4b ON ((metric1.oram_id = metric4b.oram_id)))
-     LEFT JOIN metric4c ON ((metric1.oram_id = metric4c.oram_id)))
-     LEFT JOIN metric5 ON ((metric1.oram_id = metric5.oram_id)))
-     LEFT JOIN metric6a1 ON ((metric1.oram_id = metric6a1.oram_id)))
-     LEFT JOIN metric6a2 ON ((metric1.oram_id = metric6a2.oram_id)))
-     LEFT JOIN metric6a3 ON ((metric1.oram_id = metric6a3.oram_id)))
-     LEFT JOIN metric6a4 ON ((metric1.oram_id = metric6a4.oram_id)))
-     LEFT JOIN metric6a5 ON ((metric1.oram_id = metric6a5.oram_id)))
-     LEFT JOIN metric6a6 ON ((metric1.oram_id = metric6a6.oram_id)))
-     LEFT JOIN metric6a7 ON ((metric1.oram_id = metric6a7.oram_id)))
-     LEFT JOIN metric6b ON ((metric1.oram_id = metric6b.oram_id)))
-     LEFT JOIN metric6c ON ((metric1.oram_id = metric6c.oram_id)))
-     LEFT JOIN metric6d1 ON ((metric1.oram_id = metric6d1.oram_id)))
-     LEFT JOIN metric6d2 ON ((metric1.oram_id = metric6d2.oram_id)))
-     LEFT JOIN metric6d3 ON ((metric1.oram_id = metric6d3.oram_id)))
-     LEFT JOIN metric6d4 ON ((metric1.oram_id = metric6d4.oram_id)));
--- ddl-end --
-ALTER VIEW wetland_census.cm_wetland_oram_calcs OWNER TO postgres;
--- ddl-end --
+ SELECT a.fulcrum_id,
+        CASE a.m1_wetland_area
+            WHEN '<0.1 acres (0.04 ha) (0)'::text THEN 0
+            WHEN '0.1 to <0.33 acres (0.04 to <0.12 ha) (1)'::text THEN 1
+            WHEN '0.3 to <3 acres (0.12 to <1.2 ha) (2)'::text THEN 2
+            WHEN '3 to <10 acres (1.2 to <4 ha) (3)'::text THEN 3
+            WHEN '10 to <25 acres (4 to <10.1 ha) (4)'::text THEN 4
+            WHEN '25 to <50 acres (10.1 to 20.2 ha) (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric1_value,
+        CASE a.m2a_upland_buffer_width
+            WHEN 'very narrow'::text THEN 0
+            WHEN 'narrow'::text THEN 1
+            WHEN 'medium'::text THEN 4
+            WHEN 'wide'::text THEN 7
+            ELSE NULL::integer
+        END AS metric2a_value,
+        CASE b.selection1
+            WHEN 'high'::text THEN 1
+            WHEN 'moderately high'::text THEN 3
+            WHEN 'low'::text THEN 5
+            WHEN 'very low'::text THEN 7
+            ELSE NULL::integer
+        END AS metric2b1_value,
+        CASE b.selection2
+            WHEN 'high'::text THEN 1
+            WHEN 'moderately high'::text THEN 3
+            WHEN 'low'::text THEN 5
+            WHEN 'very low'::text THEN 7
+            ELSE NULL::integer
+        END AS metric2b2_value,
+        CASE c.selection1
+            WHEN 'Precipitation (1)'::text THEN 1
+            WHEN 'Other groundwater (3)'::text THEN 3
+            WHEN 'Seasonal or intermittent surface water (3)'::text THEN 3
+            WHEN 'Perennial surface water -- lake or stream (5)'::text THEN 5
+            WHEN 'High pH groundwater (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric3a1_value,
+        CASE c.selection2
+            WHEN 'Precipitation (1)'::text THEN 1
+            WHEN 'Other groundwater (3)'::text THEN 3
+            WHEN 'Seasonal or intermittent surface water (3)'::text THEN 3
+            WHEN 'Perennial surface water -- lake or stream (5)'::text THEN 5
+            WHEN 'High pH groundwater (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric3a2_value,
+        CASE c.selection3
+            WHEN 'Precipitation (1)'::text THEN 1
+            WHEN 'Other groundwater (3)'::text THEN 3
+            WHEN 'Seasonal or intermittent surface water (3)'::text THEN 3
+            WHEN 'Perennial surface water -- lake or stream (5)'::text THEN 5
+            WHEN 'High pH groundwater (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric3a3_value,
+        CASE c.selection4
+            WHEN 'Precipitation (1)'::text THEN 1
+            WHEN 'Other groundwater (3)'::text THEN 3
+            WHEN 'Seasonal or intermittent surface water (3)'::text THEN 3
+            WHEN 'Perennial surface water -- lake or stream (5)'::text THEN 5
+            WHEN 'High pH groundwater (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric3a4_value,
+        CASE c.selection5
+            WHEN 'Precipitation (1)'::text THEN 1
+            WHEN 'Other groundwater (3)'::text THEN 3
+            WHEN 'Seasonal or intermittent surface water (3)'::text THEN 3
+            WHEN 'Perennial surface water -- lake or stream (5)'::text THEN 5
+            WHEN 'High pH groundwater (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric3a5_value,
+        CASE d.selection1
+            WHEN 'Part of wetland / upland (e.g. forest) complex (1)'::text THEN 1
+            WHEN '100 year flood plain (1)'::text THEN 1
+            WHEN 'Between stream / lake and other human use (1)'::text THEN 1
+            WHEN 'Part of riparian or upland corridor (1)'::text THEN 1
+            ELSE NULL::integer
+        END AS metric3b1_value,
+        CASE d.selection2
+            WHEN 'Part of wetland / upland (e.g. forest) complex (1)'::text THEN 1
+            WHEN '100 year flood plain (1)'::text THEN 1
+            WHEN 'Between stream / lake and other human use (1)'::text THEN 1
+            WHEN 'Part of riparian or upland corridor (1)'::text THEN 1
+            ELSE NULL::integer
+        END AS metric3b2_value,
+        CASE d.selection3
+            WHEN 'Part of wetland / upland (e.g. forest) complex (1)'::text THEN 1
+            WHEN '100 year flood plain (1)'::text THEN 1
+            WHEN 'Between stream / lake and other human use (1)'::text THEN 1
+            WHEN 'Part of riparian or upland corridor (1)'::text THEN 1
+            ELSE NULL::integer
+        END AS metric3b3_value,
+        CASE d.selection4
+            WHEN 'Part of wetland / upland (e.g. forest) complex (1)'::text THEN 1
+            WHEN '100 year flood plain (1)'::text THEN 1
+            WHEN 'Between stream / lake and other human use (1)'::text THEN 1
+            WHEN 'Part of riparian or upland corridor (1)'::text THEN 1
+            ELSE NULL::integer
+        END AS metric3b4_value,
+        CASE a.m3c_maximum_water_depth
+            WHEN '<0.4 m (<15.7 in) (1)'::text THEN 1
+            WHEN '0.4 to 0.7 m (15.7 to 27.6 in) (2)'::text THEN 2
+            WHEN '>0.7 m (>27.6 in) (3)'::text THEN 3
+            ELSE NULL::integer
+        END AS metric3c_value,
+        CASE e.selection1
+            WHEN 'Seasonally saturated in upper 30 cm (12 in) (1)'::text THEN 1
+            WHEN 'Seasonally inundated (2)'::text THEN 2
+            WHEN 'Regularly inundated/saturated (3)'::text THEN 3
+            WHEN 'Semi to permanently inundated/saturated (4)'::text THEN 4
+            ELSE NULL::integer
+        END AS metric3d1_value,
+        CASE e.selection2
+            WHEN 'Seasonally saturated in upper 30 cm (12 in) (1)'::text THEN 1
+            WHEN 'Seasonally inundated (2)'::text THEN 2
+            WHEN 'Regularly inundated/saturated (3)'::text THEN 3
+            WHEN 'Semi to permanently inundated/saturated (4)'::text THEN 4
+            ELSE NULL::integer
+        END AS metric3d2_value,
+        CASE f.selection1
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (3)'::text THEN 3
+            WHEN 'Recovered (7)'::text THEN 7
+            WHEN 'None or none apparent (12)'::text THEN 12
+            ELSE NULL::integer
+        END AS metric3e1_value,
+        CASE f.selection2
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (3)'::text THEN 3
+            WHEN 'Recovered (7)'::text THEN 7
+            WHEN 'None or none apparent (12)'::text THEN 12
+            ELSE NULL::integer
+        END AS metric3e2_value,
+        CASE g.selection1
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (2)'::text THEN 2
+            WHEN 'Recovered (3)'::text THEN 3
+            WHEN 'None or none apparent (4)'::text THEN 4
+            ELSE NULL::integer
+        END AS metric4a1_value,
+        CASE g.selection2
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (2)'::text THEN 2
+            WHEN 'Recovered (3)'::text THEN 3
+            WHEN 'None or none apparent (4)'::text THEN 4
+            ELSE NULL::integer
+        END AS metric4a2_value,
+        CASE a.m4b_habitat_development
+            WHEN 'Poor (1)'::text THEN 1
+            WHEN 'Poor to Fair (2)'::text THEN 2
+            WHEN 'Fair (3)'::text THEN 3
+            WHEN 'Moderately Good (4)'::text THEN 4
+            WHEN 'Good (5)'::text THEN 5
+            WHEN 'Very Good (6)'::text THEN 6
+            WHEN 'Excellent (7)'::text THEN 7
+            ELSE NULL::integer
+        END AS metric4b_value,
+        CASE h.selection1
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (3)'::text THEN 3
+            WHEN 'Recovered (6)'::text THEN 6
+            WHEN 'None or none apparent (9)'::text THEN 9
+            ELSE NULL::integer
+        END AS metric4c1_value,
+        CASE h.selection2
+            WHEN 'Recent or no recovery (1)'::text THEN 1
+            WHEN 'Recovering (3)'::text THEN 3
+            WHEN 'Recovered (6)'::text THEN 6
+            WHEN 'None or none apparent (9)'::text THEN 9
+            ELSE NULL::integer
+        END AS metric4c2_value,
+        CASE i.selection1
+            WHEN 'Category 1 wetland. See question 1 qualitative rating (-10)'::text THEN '-10'::integer
+            WHEN 'Mature forested wetland (5)'::text THEN 5
+            WHEN 'Bog (10)'::text THEN 10
+            WHEN 'Significant migratory songbird/water fowl habitat or usage (10)'::text THEN 10
+            WHEN 'Known occurrence state/federal threatened or endangered species (10)'::text THEN 10
+            WHEN 'Lake Erie coastal/tributary wetland - restricted hydrology (10)'::text THEN 10
+            WHEN 'Lake Erie coastal/tributary wetland - unrestricted hydrology (10)'::text THEN 10
+            WHEN 'Relict wet prairies (10)'::text THEN 10
+            WHEN 'Lake plain sand prairies (Oak Openings) (10)'::text THEN 10
+            WHEN 'Old growth forest (10)'::text THEN 10
+            WHEN 'Fen (10)'::text THEN 10
+            ELSE NULL::integer
+        END AS metric5_value1,
+        CASE i.selection2
+            WHEN 'Category 1 wetland. See question 1 qualitative rating (-10)'::text THEN '-10'::integer
+            WHEN 'Mature forested wetland (5)'::text THEN 5
+            WHEN 'Bog (10)'::text THEN 10
+            WHEN 'Significant migratory songbird/water fowl habitat or usage (10)'::text THEN 10
+            WHEN 'Known occurrence state/federal threatened or endangered species (10)'::text THEN 10
+            WHEN 'Lake Erie coastal/tributary wetland - restricted hydrology (10)'::text THEN 10
+            WHEN 'Lake Erie coastal/tributary wetland - unrestricted hydrology (10)'::text THEN 10
+            WHEN 'Relict wet prairies (10)'::text THEN 10
+            WHEN 'Lake plain sand prairies (Oak Openings) (10)'::text THEN 10
+            WHEN 'Old growth forest (10)'::text THEN 10
+            WHEN 'Fen (10)'::text THEN 10
+            ELSE NULL::integer
+        END AS metric5_value2,
+        CASE a.m6a_aquatic_bed
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a1_value,
+        CASE a.m6a_emergent
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a2_value,
+        CASE a.m6a_shrub
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a3_value,
+        CASE a.m6a_forest
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a4_value,
+        CASE a.m6a_mudflats
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a5_value,
+        CASE a.m6a_open_water
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a6_value,
+        CASE a.m6a_other
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6a_other_value1,
+        CASE a.m6b_horizontal_plan_view_interspersion
+            WHEN 'None (0)'::text THEN 0
+            WHEN 'Low (1)'::text THEN 1
+            WHEN 'Moderately low (2)'::text THEN 2
+            WHEN 'Moderate (3)'::text THEN 3
+            WHEN 'Moderately high (4)'::text THEN 4
+            WHEN 'High (5)'::text THEN 5
+            ELSE NULL::integer
+        END AS metric6b_value,
+        CASE a.m6c_coverage_of_invasive_plants
+            WHEN 'Extensive > 75% cover (-5)'::text THEN '-5'::integer
+            WHEN 'Moderate 25-75% cover (-3)'::text THEN '-3'::integer
+            WHEN 'Sparse 5-25% cover (-1)'::text THEN '-1'::integer
+            WHEN 'Nearly absent < 5% cover (0)'::text THEN 0
+            WHEN 'Absent (1)'::text THEN 1
+            ELSE NULL::integer
+        END AS metric6c_value,
+        CASE a.m6d_microtopography_vegetation_hummuckstussuck
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6d1_value,
+        CASE a.m6d_microtopography_course_woody_debris_15cm_6in
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6d2_value,
+        CASE a.m6d_microtopography_standing_dead_25cm_10in_dbh
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6d3_value,
+        CASE a.m6d_microtopography_amphibian_breeding_pools
+            WHEN '0'::text THEN 0
+            WHEN '1'::text THEN 1
+            WHEN '2'::text THEN 2
+            WHEN '3'::text THEN 3
+            ELSE NULL::integer
+        END AS metric6d4_value
+   FROM ((((((((oram_v2 a
+     LEFT JOIN metric2b_split b ON (((b.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric3a_split c ON (((c.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric3b_split d ON (((d.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric3d_split e ON (((e.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric3e_split f ON (((f.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric4a_split g ON (((g.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric4c_split h ON (((h.fulcrum_id)::text = (a.fulcrum_id)::text)))
+     LEFT JOIN metric5_split i ON (((i.fulcrum_id)::text = (a.fulcrum_id)::text)));
 
--- object: wetland_census.cm_wetland_oram_category | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.cm_wetland_oram_category CASCADE;
-CREATE VIEW wetland_census.cm_wetland_oram_category
-AS 
 
-SELECT cm_wetland_oram_calcs.oram_id,
-    cm_wetland_oram_calcs.grand_total,
-        CASE
-            WHEN (cm_wetland_oram_calcs.grand_total < 30.0) THEN '1'::text
-            WHEN ((cm_wetland_oram_calcs.grand_total > 29.9) AND (cm_wetland_oram_calcs.grand_total < 50.0)) THEN '2a'::text
-            WHEN ((cm_wetland_oram_calcs.grand_total > 49.9) AND (cm_wetland_oram_calcs.grand_total < 60.0)) THEN '2b'::text
-            WHEN (cm_wetland_oram_calcs.grand_total > 59.9) THEN '3'::text
-            ELSE NULL::text
-        END AS category
-   FROM cm_wetland_oram_calcs;
--- ddl-end --
-ALTER VIEW wetland_census.cm_wetland_oram_category OWNER TO postgres;
--- ddl-end --
+ALTER TABLE oram_metric_values OWNER TO jreinier;
 
--- object: wetland_census.cm_wetland_plant_community_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_plant_community_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_plant_community_norm(
-	classification_id bigint NOT NULL,
-	plant_community text NOT NULL,
-	CONSTRAINT cm_wetland_plant_community_norm_pkey PRIMARY KEY (plant_community,classification_id)
+--
+-- TOC entry 728 (class 1259 OID 652194)
+-- Name: oram_metrics; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
+CREATE TABLE oram_metrics (
+    fulcrum_id character varying(100) NOT NULL,
+    metric1_selection text,
+    metric2a_selection text,
+    metric2b_selection1 text,
+    metric2b_selection2 text,
+    metric3a_selection1 text,
+    metric3a_selection2 text,
+    metric3a_selection3 text,
+    metric3a_selection4 text,
+    metric3a_selection5 text,
+    metric3b_selection1 text,
+    metric3b_selection2 text,
+    metric3b_selection3 text,
+    metric3b_selection4 text,
+    metric3c_selection text,
+    metric3d_selection1 text,
+    metric3d_selection2 text,
+    metric3e_selection1 text,
+    metric3e_selection2 text,
+    hydro_disturbance1 text,
+    hydro_disturbance2 text,
+    hydro_disturbance3 text,
+    hydro_disturbance4 text,
+    hydro_disturbance5 text,
+    hydro_disturbance6 text,
+    hydro_disturbance7 text,
+    hydro_disturbance8 text,
+    hydro_disturbance9 text,
+    hydro_disturbance_other text,
+    metric4a_selection1 text,
+    metric4a_selection2 text,
+    metric4b_selection text,
+    metric4c_selection1 text,
+    metric4c_selection2 text,
+    habitat_disturbance1 text,
+    habitat_disturbance2 text,
+    habitat_disturbance3 text,
+    habitat_disturbance4 text,
+    habitat_disturbance5 text,
+    habitat_disturbance6 text,
+    habitat_disturbance7 text,
+    habitat_disturbance8 text,
+    habitat_disturbance9 text,
+    habitat_disturbance10 text,
+    habitat_disturbance11 text,
+    habitat_disturbance12 text,
+    habitat_disturbance_other text,
+    metric5_selection1 text,
+    metric5_selection2 text,
+    metric6a1_aquatic_bed text,
+    metric6a2_emergent text,
+    metric6a3_shrub text,
+    metric6a4_forest text,
+    metric6a5_mudflats text,
+    metric6a6_open_water text,
+    metric6a_other1 text,
+    metric6b_selection text,
+    metric6c_selection text,
+    metric6d1_selection text,
+    metric6d2_selection text,
+    metric6d3_selection text,
+    metric6d4_selection text
 );
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_plant_community_norm OWNER TO postgres;
--- ddl-end --
 
--- object: wetland_census.cm_wetland_water_flow_path | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_water_flow_path CASCADE;
-CREATE TABLE wetland_census.cm_wetland_water_flow_path(
-	classification_id bigint NOT NULL,
-	water_flow_path text NOT NULL,
-	CONSTRAINT cm_wetland_water_flow_path_pkey PRIMARY KEY (water_flow_path,classification_id)
 
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_water_flow_path OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_poly_id_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_poly_id_norm CASCADE;
-CREATE TABLE wetland_census.oram_poly_id_norm(
-	oram_id bigint NOT NULL,
-	polygon_id text NOT NULL,
-	CONSTRAINT oram_poly_id_norm_pkey PRIMARY KEY (oram_id,polygon_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_poly_id_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_reservation_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_reservation_norm CASCADE;
-CREATE TABLE wetland_census.oram_reservation_norm(
-	oram_id bigint NOT NULL,
-	reservation text,
-	CONSTRAINT oram_reservation_norm_pkey PRIMARY KEY (oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_reservation_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetlands_all_cm_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.cm_wetlands_all_cm_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.cm_wetlands_all_cm_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.cm_wetlands_all_cm_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_coordinates | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_coordinates CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_coordinates(
-	classification_id bigint NOT NULL,
-	latitude numeric NOT NULL,
-	longitude numeric NOT NULL,
-	CONSTRAINT cm_wetland_classification_coordinates_pkey PRIMARY KEY (latitude,longitude,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_coordinates OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_geometry | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_geometry CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_geometry(
-	classification_id bigint NOT NULL,
-	geometry geometry,
-	CONSTRAINT cm_wetland_classification_geometry_pkey PRIMARY KEY (classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_geometry OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_notes | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_notes CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_notes(
-	classification_id bigint NOT NULL,
-	notes text,
-	CONSTRAINT cm_wetland_classification_notes_pkey PRIMARY KEY (classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_notes OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_polygon_id | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_polygon_id CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_polygon_id(
-	classification_id bigint NOT NULL,
-	polygon_id text NOT NULL,
-	CONSTRAINT cm_wetland_classification_polygon_id_pkey PRIMARY KEY (polygon_id,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_polygon_id OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_recorder | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_recorder CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_recorder(
-	classification_id bigint NOT NULL,
-	data_recorded_by_initials text NOT NULL
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_recorder OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_reservation | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_reservation CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_reservation(
-	classification_id bigint NOT NULL,
-	reservation text NOT NULL,
-	CONSTRAINT cm_wetland_classification_reservation_pkey PRIMARY KEY (reservation,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_reservation OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_to_fulcrum_form_classification_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.cm_wetland_classification_to_fulcrum_form_classification_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.cm_wetland_classification_to_fulcrum_form_classification_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.cm_wetland_classification_to_fulcrum_form_classification_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_classification_to_fulcrum_format | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_classification_to_fulcrum_format CASCADE;
-CREATE TABLE wetland_census.cm_wetland_classification_to_fulcrum_format(
-	fulcrum_id text,
-	created_at timestamp,
-	updated_at timestamp,
-	created_by text,
-	updated_by text,
-	system_created_at timestamp,
-	system_updated_at timestamp,
-	version bigint,
-	status text,
-	project text,
-	assigned_to text,
-	latitude numeric,
-	longitude numeric,
-	eight_digit_huc text,
-	twelve_digit_huc text,
-	geometry geometry,
-	polygon_id text,
-	reservation text,
-	data_recorded_by_initials text,
-	classification_level text,
-	plant_community text,
-	plant_community_other text,
-	landscape_position text,
-	inland_landform text,
-	water_flow_path text,
-	llww_modifiers text,
-	cowardin_classification text,
-	cowardin_water_regime text,
-	cowardin_special_modifier text,
-	sp1 text,
-	sp2 text,
-	sp3 text,
-	sp4 text,
-	sp5 text,
-	sp6 text,
-	sp7 text,
-	sp8 text,
-	sp9 text,
-	sp10 text,
-	classification_id bigint NOT NULL DEFAULT nextval('wetland_census.cm_wetland_classification_to_fulcrum_form_classification_id_seq'::regclass),
-	CONSTRAINT cm_wetland_classification_to_fulcrum_format_pkey PRIMARY KEY (classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_classification_to_fulcrum_format OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_cowardin_special_modifier_other | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_cowardin_special_modifier_other CASCADE;
-CREATE TABLE wetland_census.cm_wetland_cowardin_special_modifier_other(
-	classification_id bigint NOT NULL,
-	cowardin_special_modifier_other text NOT NULL,
-	CONSTRAINT cm_wetland_cowardin_special_modifier_other_pkey PRIMARY KEY (cowardin_special_modifier_other,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier_other OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_dominant_species | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_dominant_species CASCADE;
-CREATE TABLE wetland_census.cm_wetland_dominant_species(
-	classification_id bigint NOT NULL,
-	plant_species text
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_dominant_species OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_photos_caption_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_photos_caption_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_photos_caption_norm(
-	classification_id bigint NOT NULL,
-	photos_caption text NOT NULL,
-	CONSTRAINT cm_wetland_photos_caption_norm_pkey PRIMARY KEY (photos_caption,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_photos_caption_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_photos_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_photos_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_photos_norm(
-	classification_id bigint NOT NULL,
-	photos text NOT NULL,
-	CONSTRAINT cm_wetland_photos_norm_pkey PRIMARY KEY (photos,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_photos_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_photos_url_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_photos_url_norm CASCADE;
-CREATE TABLE wetland_census.cm_wetland_photos_url_norm(
-	classification_id bigint NOT NULL,
-	photos_url text NOT NULL,
-	CONSTRAINT cm_wetland_photos_url_norm_pkey PRIMARY KEY (photos_url,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_photos_url_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetland_plant_community_other | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetland_plant_community_other CASCADE;
-CREATE TABLE wetland_census.cm_wetland_plant_community_other(
-	classification_id bigint NOT NULL,
-	plant_community_other text NOT NULL,
-	CONSTRAINT cm_wetland_plant_community_other_pkey PRIMARY KEY (plant_community_other,classification_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetland_plant_community_other OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cuy_ssurgo_with_compnents | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.cuy_ssurgo_with_compnents CASCADE;
-CREATE VIEW wetland_census.cuy_ssurgo_with_compnents
-AS 
-
-SELECT unit.musym,
-    unit.muname,
-    co.comppct_l,
-    co.comppct_r,
-    co.comppct_h,
-    co.compname,
-    co.compkind,
-    co.majcompflag,
-    co.otherph,
-    co.localphase,
-    co.slope_l,
-    co.slope_r,
-    co.slope_h,
-    co.slopelenusle_l,
-    co.slopelenusle_r,
-    co.slopelenusle_h,
-    co.runoff,
-    co.tfact,
-    co.wei,
-    co.weg,
-    co.erocl,
-    co.earthcovkind1,
-    co.earthcovkind2,
-    co.hydricon,
-    co.hydricrating,
-    co.drainagecl,
-    co.elev_l,
-    co.elev_r,
-    co.elev_h,
-    co.aspectccwise,
-    co.aspectrep,
-    co.aspectcwise,
-    co.geomdesc,
-    co.albedodry_l,
-    co.albedodry_r,
-    co.albedodry_h,
-    co.airtempa_l,
-    co.airtempa_r,
-    co.airtempa_h,
-    co.map_l,
-    co.map_r,
-    co.map_h,
-    co.reannualprecip_l,
-    co.reannualprecip_r,
-    co.reannualprecip_h,
-    co.ffd_l,
-    co.ffd_r,
-    co.ffd_h,
-    co.nirrcapcl,
-    co.nirrcapscl,
-    co.nirrcapunit,
-    co.irrcapcl,
-    co.irrcapscl,
-    co.irrcapunit,
-    co.cropprodindex,
-    co.constreeshrubgrp,
-    co.wndbrksuitgrp,
-    co.rsprod_l,
-    co.rsprod_r,
-    co.rsprod_h,
-    co.foragesuitgrpid,
-    co.wlgrain,
-    co.wlgrass,
-    co.wlherbaceous,
-    co.wlshrub,
-    co.wlconiferous,
-    co.wlhardwood,
-    co.wlwetplant,
-    co.wlshallowwat,
-    co.wlrangeland,
-    co.wlopenland,
-    co.wlwoodland,
-    co.wlwetland,
-    co.soilslippot,
-    co.frostact,
-    co.initsub_l,
-    co.initsub_r,
-    co.initsub_h,
-    co.totalsub_l,
-    co.totalsub_r,
-    co.totalsub_h,
-    co.hydgrp,
-    co.corcon,
-    co.corsteel,
-    co.taxclname,
-    co.taxorder,
-    co.taxsuborder,
-    co.taxgrtgroup,
-    co.taxsubgrp,
-    co.taxpartsize,
-    co.taxpartsizemod,
-    co.taxceactcl,
-    co.taxreaction,
-    co.taxtempcl,
-    co.taxmoistscl,
-    co.taxtempregime,
-    co.soiltaxedition,
-    co.castorieindex,
-    co.flecolcomnum,
-    co.flhe,
-    co.flphe,
-    co.flsoilleachpot,
-    co.flsoirunoffpot,
-    co.fltemik2use,
-    co.fltriumph2use,
-    co.indraingrp,
-    co.innitrateleachi,
-    co.misoimgmtgrp,
-    co.vasoimgtgrp,
-    co.mukey,
-    co.cokey
-   FROM (nr_misc.mapunit unit
-     LEFT JOIN nr_misc.component co ON (((unit.mukey)::text = (co.mukey)::text)));
--- ddl-end --
-ALTER VIEW wetland_census.cuy_ssurgo_with_compnents OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hydro_disturbances_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.hydro_disturbances_norm CASCADE;
-CREATE TABLE wetland_census.hydro_disturbances_norm(
-	oram_id bigint NOT NULL,
-	disturbances_hydro text NOT NULL,
-	CONSTRAINT hydro_disturbances_norm_pkey PRIMARY KEY (oram_id,disturbances_hydro)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.hydro_disturbances_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hydro_test | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.hydro_test CASCADE;
-CREATE VIEW wetland_census.hydro_test
-AS 
-
-SELECT water_level_data."timestamp",
-    water_level_data.level_cm,
-    water_level_data.serial
-   FROM nr_misc.water_level_data
-  WHERE (((water_level_data.serial)::text = '00001130D339'::text) AND ((water_level_data."timestamp" >= '2009-11-24 16:00:00'::timestamp without time zone) AND (water_level_data."timestamp" <= '2009-12-24 16:00:00'::timestamp without time zone)));
--- ddl-end --
-ALTER VIEW wetland_census.hydro_test OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric1_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric1_norm CASCADE;
-CREATE TABLE wetland_census.metric1_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric1_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric1_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric2a_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric2a_norm CASCADE;
-CREATE TABLE wetland_census.metric2a_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric2a_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric2a_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric2b_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric2b_norm CASCADE;
-CREATE TABLE wetland_census.metric2b_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric2b_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric2b_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric3a_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3a_norm CASCADE;
-CREATE TABLE wetland_census.metric3a_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric3a_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3a_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric3b_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3b_norm CASCADE;
-CREATE TABLE wetland_census.metric3b_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric3b_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3b_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric3c_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3c_norm CASCADE;
-CREATE TABLE wetland_census.metric3c_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric3c_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3c_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric3d_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3d_norm CASCADE;
-CREATE TABLE wetland_census.metric3d_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric3d_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3d_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric3e_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric3e_norm CASCADE;
-CREATE TABLE wetland_census.metric3e_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric3e_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric3e_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric4a_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4a_norm CASCADE;
-CREATE TABLE wetland_census.metric4a_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric4a_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4a_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric4b_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4b_norm CASCADE;
-CREATE TABLE wetland_census.metric4b_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric4b_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4b_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric4c_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric4c_norm CASCADE;
-CREATE TABLE wetland_census.metric4c_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric4c_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric4c_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric5_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric5_norm CASCADE;
-CREATE TABLE wetland_census.metric5_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric5_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric5_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a1_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a1_norm CASCADE;
-CREATE TABLE wetland_census.metric6a1_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a1_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a1_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a2_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a2_norm CASCADE;
-CREATE TABLE wetland_census.metric6a2_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a2_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a2_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a3_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a3_norm CASCADE;
-CREATE TABLE wetland_census.metric6a3_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a3_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a3_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a4_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a4_norm CASCADE;
-CREATE TABLE wetland_census.metric6a4_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a4_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a4_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a5_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a5_norm CASCADE;
-CREATE TABLE wetland_census.metric6a5_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a5_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a5_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a6_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a6_norm CASCADE;
-CREATE TABLE wetland_census.metric6a6_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a6_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a6_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6a7_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6a7_norm CASCADE;
-CREATE TABLE wetland_census.metric6a7_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6a7_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6a7_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6b_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6b_norm CASCADE;
-CREATE TABLE wetland_census.metric6b_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6b_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6b_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6c_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6c_norm CASCADE;
-CREATE TABLE wetland_census.metric6c_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6c_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6c_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d1_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d1_norm CASCADE;
-CREATE TABLE wetland_census.metric6d1_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6d1_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d1_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d2_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d2_norm CASCADE;
-CREATE TABLE wetland_census.metric6d2_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6d2_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d2_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d3_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d3_norm CASCADE;
-CREATE TABLE wetland_census.metric6d3_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6d3_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d3_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.metric6d4_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.metric6d4_norm CASCADE;
-CREATE TABLE wetland_census.metric6d4_norm(
-	oram_id bigint NOT NULL,
-	selection text NOT NULL,
-	CONSTRAINT metric6d4_norm_pkey PRIMARY KEY (oram_id,selection)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.metric6d4_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_id | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_id CASCADE;
-CREATE TABLE wetland_census.oram_id(
-	oram_id bigint NOT NULL,
-	fulcrum_id character varying(100),
-	CONSTRAINT oram_id_pkey PRIMARY KEY (oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_id OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_notes | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_notes CASCADE;
-CREATE TABLE wetland_census.oram_notes(
-	oram_id bigint NOT NULL,
-	notes text,
-	CONSTRAINT oram_notes_pkey PRIMARY KEY (oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_notes OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_photos_caption_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_photos_caption_norm CASCADE;
-CREATE TABLE wetland_census.oram_photos_caption_norm(
-	oram_id bigint NOT NULL,
-	photos_caption text NOT NULL,
-	CONSTRAINT oram_photos_caption_norm_pkey PRIMARY KEY (photos_caption,oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_photos_caption_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_photos_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_photos_norm CASCADE;
-CREATE TABLE wetland_census.oram_photos_norm(
-	oram_id bigint NOT NULL,
-	photos text NOT NULL,
-	CONSTRAINT oram_photos_norm_pkey PRIMARY KEY (photos,oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_photos_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_photos_url_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_photos_url_norm CASCADE;
-CREATE TABLE wetland_census.oram_photos_url_norm(
-	oram_id bigint NOT NULL,
-	photos_url text NOT NULL,
-	CONSTRAINT oram_photos_url_norm_pkey PRIMARY KEY (photos_url,oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_photos_url_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_recorder_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_recorder_norm CASCADE;
-CREATE TABLE wetland_census.oram_recorder_norm(
-	oram_id bigint NOT NULL,
-	data_recorded_by_initials text NOT NULL,
-	CONSTRAINT oram_recorder_norm_pkey PRIMARY KEY (oram_id,data_recorded_by_initials)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_recorder_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_score_lookup_all_lookup_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.oram_score_lookup_all_lookup_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.oram_score_lookup_all_lookup_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.oram_score_lookup_all_lookup_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_score_lookup_all | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_score_lookup_all CASCADE;
-CREATE TABLE wetland_census.oram_score_lookup_all(
-	metric text NOT NULL,
-	selection text NOT NULL,
-	value numeric NOT NULL,
-	lookup_id integer NOT NULL DEFAULT nextval('wetland_census.oram_score_lookup_all_lookup_id_seq'::regclass),
-	CONSTRAINT oram_score_lookup_all_pkey PRIMARY KEY (value,lookup_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_score_lookup_all OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_v2 | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_v2 CASCADE;
-CREATE TABLE wetland_census.oram_v2(
-	fulcrum_id character varying(100),
-	created_at timestamp,
-	updated_at timestamp,
-	created_by text,
-	updated_by text,
-	system_created_at timestamp,
-	system_updated_at timestamp,
-	version bigint,
-	status text,
-	project text,
-	assigned_to text,
-	latitude double precision,
-	longitude double precision,
-	geometry geometry,
-	reservation text,
-	polygon_id text,
-	date text,
-	data_recorded_by_initials text,
-	m1_wetland_area text,
-	m2a_upland_buffer_width text,
-	m2b_surrounding_land_use text,
-	m3a_sources_of_water text,
-	m3b_connectivity text,
-	m3c_maximum_water_depth text,
-	m3d_duration_inundation_saturation text,
-	m3e_modifications_to_hydrologic_regime text,
-	disturbances_hydro text,
-	m4a_substrate_disturbance text,
-	m4b_habitat_development text,
-	m4c_habitat_alteration text,
-	disturbances_substrate text,
-	disturbances_substrate_other text,
-	m6a_aquatic_bed text,
-	m6a_emergent text,
-	m6a_shrub text,
-	m6a_forest text,
-	m6a_mudflats text,
-	m6a_open_water text,
-	m6a_other text,
-	m6a_other_list text,
-	m6b_horizontal_plan_view_interspersion text,
-	m6c_coverage_of_invasive_plants text,
-	m6d_microtopography_vegetation_hummuckstussuck text,
-	m6d_microtopography_course_woody_debris_15cm_6in text,
-	m6d_microtopography_standing_dead_25cm_10in_dbh text,
-	m6d_microtopography_amphibian_breeding_pools text,
-	m5_special_wetlands text,
-	notes text,
-	photos text,
-	photos_caption text,
-	photos_url text
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_v2 OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_v2_photos | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_v2_photos CASCADE;
-CREATE TABLE wetland_census.oram_v2_photos(
-	fulcrum_id text,
-	fulcrum_parent_id text,
-	fulcrum_record_id text,
-	version bigint,
-	caption text,
-	latitude double precision,
-	longitude double precision,
-	geometry geometry,
-	file_size bigint,
-	uploaded_at timestamp,
-	exif_date_time text,
-	exif_gps_altitude text,
-	exif_gps_date_stamp text,
-	exif_gps_time_stamp text,
-	exif_gps_dop text,
-	exif_gps_img_direction text,
-	exif_gps_img_direction_ref text,
-	exif_gps_latitude text,
-	exif_gps_latitude_ref text,
-	exif_gps_longitude text,
-	exif_gps_longitude_ref text,
-	exif_make text,
-	exif_model text,
-	exif_orientation text,
-	exif_pixel_x_dimension text,
-	exif_pixel_y_dimension text,
-	exif_software text,
-	exif_x_resolution text,
-	exif_y_resolution text
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_v2_photos OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.seq_test | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.seq_test CASCADE;
-CREATE SEQUENCE wetland_census.seq_test
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.seq_test OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.substrate_disturbances_norm | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.substrate_disturbances_norm CASCADE;
-CREATE TABLE wetland_census.substrate_disturbances_norm(
-	oram_id bigint NOT NULL,
-	disturbances_substrate text NOT NULL,
-	CONSTRAINT substrate_disturbances_norm_pkey PRIMARY KEY (oram_id,disturbances_substrate)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.substrate_disturbances_norm OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_classification | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.wetland_classification CASCADE;
-CREATE TABLE wetland_census.wetland_classification(
-	fulcrum_id character varying(100) NOT NULL,
-	created_at timestamp,
-	updated_at timestamp,
-	created_by text,
-	updated_by text,
-	system_created_at timestamp,
-	system_updated_at timestamp,
-	version bigint,
-	status text,
-	project text,
-	assigned_to text,
-	latitude double precision,
-	longitude double precision,
-	geometry geometry,
-	reservation text,
-	polygon_id text,
-	data_recorded_by_initials text,
-	classification_level text,
-	landscape_position text,
-	inland_landform text,
-	water_flow_path text,
-	llww_modifiers text,
-	cowardin_classification text,
-	cowardin_water_regime text,
-	cowardin_special_modifier text,
-	cowardin_special_modifier_other text,
-	plant_community text,
-	plant_community_other text,
-	sp1 text,
-	sp2 text,
-	sp3 text,
-	sp4 text,
-	sp5 text,
-	sp6 text,
-	sp7 text,
-	sp8 text,
-	sp9 text,
-	sp10 text,
-	notes text,
-	photos text,
-	photos_caption text,
-	photos_url text,
-	CONSTRAINT wetland_classification_pkey PRIMARY KEY (fulcrum_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.wetland_classification OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_classification_data_serial_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.wetland_classification_data_serial_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.wetland_classification_data_serial_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.wetland_classification_data_serial_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_classification_pre_fulcrum | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.wetland_classification_pre_fulcrum CASCADE;
-CREATE TABLE wetland_census.wetland_classification_pre_fulcrum(
-	project_label character varying(80),
-	investigators character varying(80),
-	start_date date,
-	end_date date,
-	photos character varying(80),
-	unique_id character varying(20) NOT NULL,
-	state character varying(80),
-	county character varying(80),
-	reserv character varying(20) NOT NULL,
-	eight_digit_huc character varying(80),
-	twelve_digit_huc character varying(80),
-	p_class character varying(80),
-	p_subclass character varying(80),
-	p_comp character varying(80),
-	s_class character varying(80),
-	s_subclass character varying(80),
-	s_comp character varying(80),
-	o1_class character varying(80),
-	o1_subclass character varying(80),
-	o1_comp character varying(80),
-	o2_class character varying(80),
-	o2_subclass character varying(80),
-	o2_comp character varying(80),
-	o3_class character varying(80),
-	o3_subclass character varying(80),
-	o3_comp character varying(80),
-	o4_class character varying(80),
-	o4_subclass character varying(80),
-	o4_comp character varying(80),
-	o5_class character varying(80),
-	o5_subclass character varying(80),
-	o5_comp character varying(80),
-	o6_class character varying(80),
-	o6_subclass character varying(80),
-	o6_comp character varying(80),
-	p_landscape character varying(80),
-	p_gradient_type character varying(80),
-	p_ls_mod character varying(80),
-	p_landform character varying(80),
-	p_lf_mod character varying(80),
-	p_waterflow character varying(80),
-	p_wf_mod character varying(80),
-	p_other_mod1 character varying(80),
-	p_other_mod2 character varying(80),
-	p_other_mod3 character varying(80),
-	s_landscape character varying(80),
-	s_gradient_type character varying(80),
-	s_ls_mod character varying(80),
-	s_landform character varying(80),
-	s_lf_mod character varying(80),
-	s_waterflow character varying(80),
-	s_wf_mod character varying(80),
-	s_other_mod1 character varying(80),
-	s_other_mod2 character varying(80),
-	s_other_mod3 character varying(80),
-	o1_landscape character varying(80),
-	o1_gradient_type character varying(80),
-	o1_ls_mod character varying(80),
-	o1_landform character varying(80),
-	o1_lf_mod character varying(80),
-	o1_waterflow character varying(80),
-	o1_wf_mod character varying(80),
-	o1_other_mod1 character varying(80),
-	o1_other_mod2 character varying(80),
-	o1_other_mod3 character varying(80),
-	o2_landscape character varying(80),
-	o2_gradient_type character varying(80),
-	o2_ls_mod character varying(80),
-	o2_landform character varying(80),
-	o2_lf_mod character varying(80),
-	o2_waterflow character varying(80),
-	o2_wf_mod character varying(80),
-	o2_other_mod1 character varying(80),
-	o2_other_mod2 character varying(80),
-	o2_other_mod3 character varying(80),
-	p_cow_system character varying(80),
-	p_cow_class character varying(80),
-	p_cow_water character varying(80),
-	p_cow_special character varying(80),
-	s_cow_system character varying(80),
-	s_cow_class character varying(80),
-	s_cow_water character varying(80),
-	s_cow_special character varying(80),
-	o1_cow_system character varying(80),
-	o1_cow_class character varying(80),
-	o1_cow_water character varying(80),
-	o1_cow_special character varying(80),
-	o2_cow_system character varying(80),
-	o2_cow_class character varying(80),
-	o2_cow_water character varying(80),
-	o2_cow_special character varying(80),
-	o3_cow_system character varying(80),
-	o3_cow_class character varying(80),
-	o3_cow_water character varying(80),
-	o3_cow_special character varying(80),
-	o4_cow_system character varying(80),
-	o4_cow_class character varying(80),
-	o4_cow_water character varying(80),
-	o4_cow_special character varying(80),
-	serial_id bigint NOT NULL DEFAULT nextval('wetland_census.wetland_classification_data_serial_id_seq'::regclass),
-	CONSTRAINT class_pkey PRIMARY KEY (unique_id,reserv)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.wetland_classification_pre_fulcrum OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_classification_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.wetland_classification_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.wetland_classification_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 2705
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.wetland_classification_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_classification_photos | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.wetland_classification_photos CASCADE;
-CREATE TABLE wetland_census.wetland_classification_photos(
-	fulcrum_id text,
-	fulcrum_parent_id text,
-	fulcrum_record_id text,
-	version bigint,
-	caption text,
-	latitude double precision,
-	longitude double precision,
-	geometry geometry,
-	file_size bigint,
-	uploaded_at timestamp,
-	exif_date_time text,
-	exif_gps_altitude text,
-	exif_gps_date_stamp text,
-	exif_gps_time_stamp text,
-	exif_gps_dop text,
-	exif_gps_img_direction text,
-	exif_gps_img_direction_ref text,
-	exif_gps_latitude text,
-	exif_gps_latitude_ref text,
-	exif_gps_longitude text,
-	exif_gps_longitude_ref text,
-	exif_make text,
-	exif_model text,
-	exif_orientation text,
-	exif_pixel_x_dimension text,
-	exif_pixel_y_dimension text,
-	exif_software text,
-	exif_x_resolution text,
-	exif_y_resolution text
-);
--- ddl-end --
-ALTER TABLE wetland_census.wetland_classification_photos OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_oram_data_serial_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.wetland_oram_data_serial_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.wetland_oram_data_serial_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.wetland_oram_data_serial_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_oram_data_pre_fulcrum | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.wetland_oram_data_pre_fulcrum CASCADE;
-CREATE TABLE wetland_census.wetland_oram_data_pre_fulcrum(
-	reserv character varying(80) NOT NULL,
-	unique_id character varying(80) NOT NULL,
-	oram_id text NOT NULL,
-	date date,
-	recorder character varying(80),
-	m1_less_01 character varying(80),
-	m1_01_to_03 character varying(80),
-	m1_03_to_3 character varying(80),
-	m1_3_to_10 character varying(80),
-	m1_10_to_25 character varying(80),
-	m1_25_to_50 character varying(80),
-	m1_greater_50 character varying(80),
-	m1_score numeric,
-	m2a_wide character varying(80),
-	m2a_medium character varying(80),
-	m2a_narrow character varying(80),
-	m2a_very_narrow character varying(80),
-	m2a_score numeric,
-	m2b_very_low character varying(80),
-	m2b_low character varying(80),
-	m2b_mod_high character varying(80),
-	m2b_high character varying(80),
-	m2b_score numeric,
-	m3a_high_ph_gw character varying(80),
-	m3a_other_gw character varying(80),
-	m3a_precip character varying(80),
-	m3a_sisw character varying(80),
-	m3a_psw character varying(80),
-	m3a_score numeric,
-	m3b_hndrd_yr_fp character varying(80),
-	m3b_bt_water_human character varying(80),
-	m3b_wl_up_complex character varying(80),
-	m3b_riparian character varying(80),
-	m3b_score numeric,
-	m3c_greater_07m character varying(80),
-	m3c_04_to_07m character varying(80),
-	m3c_less_04m character varying(80),
-	m3c_score numeric,
-	m3d_perm_i_s character varying(80),
-	m3d_reg_i_s character varying(80),
-	m3d_season_i character varying(80),
-	m3d_season_s character varying(80),
-	m3d_score numeric,
-	m3e_none character varying(80),
-	m3e_recovered character varying(80),
-	m3e_recovering character varying(80),
-	m3e_no_recovery character varying(80),
-	m3e_score numeric,
-	m3_ditch character varying(80),
-	m3_dike character varying(80),
-	m3_sw character varying(80),
-	m3_fill_grade character varying(80),
-	m3_dredging character varying(80),
-	m3_tile character varying(80),
-	m3_weir character varying(80),
-	m3_point_source character varying(80),
-	m3_roadbed character varying(80),
-	m3_other character varying(80),
-	m4_mowing character varying(80),
-	m4_grazing character varying(80),
-	m4_clearcut character varying(80),
-	m4_sel_cut character varying(80),
-	m4_cwd_remove character varying(80),
-	m4_sedimentation character varying(80),
-	m4_tox_poll character varying(80),
-	m4_shrub_remove character varying(80),
-	m4_ab_remove character varying(80),
-	m4_farming character varying(80),
-	m4_nutrients character varying(80),
-	m4_dredging character varying(80),
-	m4_other character varying(80),
-	m4a_none character varying(80),
-	m4a_recovered character varying(80),
-	m4a_recovering character varying(80),
-	m4a_no_recovery character varying(80),
-	m4a_score numeric,
-	m4b_excellent character varying(80),
-	m4b_very_good character varying(80),
-	m4b_good character varying(80),
-	m4b_mod_good character varying(80),
-	m4b_fair character varying(80),
-	m4b_poor_fair character varying(80),
-	m4b_poor character varying(80),
-	m4b_score numeric,
-	m4c_none character varying(80),
-	m4c_recovered character varying(80),
-	m4c_recovering character varying(80),
-	m4c_no_recovery character varying(80),
-	m4c_score numeric,
-	m6a_ab numeric,
-	m6a_emergent numeric,
-	m6a_shrub numeric,
-	m6a_forest numeric,
-	m6a_mudflat numeric,
-	m6a_open_water numeric,
-	m6a_other numeric,
-	m6a_score numeric,
-	m6b_high character varying(80),
-	m6b_mod_high character varying(80),
-	m6b_moderate character varying(80),
-	m6b_mod_low character varying(80),
-	m6b_low character varying(80),
-	m6b_none character varying(80),
-	m6b_score numeric,
-	m6c_extensive character varying(80),
-	m6c_moderate character varying(80),
-	m6c_sparse character varying(80),
-	m6c_n_absent character varying(80),
-	m6c_absent character varying(80),
-	m6c_score numeric,
-	m6d_humm_tuss numeric,
-	m6d_cwd numeric,
-	m6d_stand_dead numeric,
-	m6d_breed_pools numeric,
-	m6d_score numeric,
-	m5_bog character varying(80),
-	m5_fen character varying(80),
-	m5_old_growth character varying(80),
-	m5_mature_forest character varying(80),
-	m5_lp_sandprairie character varying(80),
-	m5_rel_wet_prairie character varying(80),
-	m5_unrest_coastal character varying(80),
-	m5_rest_coastal character varying(80),
-	m5_tore_species character varying(80),
-	m5_bird_useage character varying(80),
-	m5_category1 character varying(80),
-	m5_score numeric,
-	grand_total numeric,
-	oram_cat character varying(20),
-	serial_id bigint NOT NULL DEFAULT nextval('wetland_census.wetland_oram_data_serial_id_seq'::regclass),
-	CONSTRAINT oram_pkey PRIMARY KEY (reserv,unique_id,oram_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.wetland_oram_data_pre_fulcrum OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wetland_oram_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.wetland_oram_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.wetland_oram_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1909
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.wetland_oram_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bcr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bcr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.bcr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bcr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bcr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bcr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.bcr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bcr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.cm_wetlands_all | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.cm_wetlands_all CASCADE;
-CREATE TABLE wetland_census.cm_wetlands_all(
-	unique_id text NOT NULL,
-	reserv text NOT NULL,
-	geom geometry,
-	area_acres numeric,
-	poly_type character varying(20),
-	cm_id bigint NOT NULL DEFAULT nextval('wetland_census.cm_wetlands_all_cm_id_seq'::regclass),
-	CONSTRAINT wetlands_all_pkey PRIMARY KEY (unique_id,reserv)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.cm_wetlands_all OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bcr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.bcr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.bcr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('bcr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	gid integer DEFAULT nextval('wetland_census.bcr_wetlands_final_gid_seq'::regclass),
-	CONSTRAINT bcr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.bcr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bed_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bed_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.bed_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bed_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bed_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bed_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.bed_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bed_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bed_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.bed_wetlands_final CASCADE;
-CREATE TABLE wetland_census.bed_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('bed_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.bed_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT bed_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.bed_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bre_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bre_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.bre_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bre_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bre_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.bre_wetlands_final CASCADE;
-CREATE TABLE wetland_census.bre_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('bre_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.bre_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT bre_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.bre_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bwr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bwr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.bwr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bwr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bwr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.bwr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.bwr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.bwr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.bwr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.bwr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.bwr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('bwr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.bwr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT bwr_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.bwr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.ecr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.ecr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.ecr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.ecr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.ecr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.ecr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.ecr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.ecr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.ecr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.ecr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.ecr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('ecr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.ecr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT ecr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.ecr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hin_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.hin_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.hin_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.hin_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hin_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.hin_wetlands_final CASCADE;
-CREATE TABLE wetland_census.hin_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('hin_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.hin_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT hin_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.hin_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hun_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.hun_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.hun_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.hun_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hun_wetland_polygons_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.hun_wetland_polygons_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.hun_wetland_polygons_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.hun_wetland_polygons_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.hun_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.hun_wetlands_final CASCADE;
-CREATE TABLE wetland_census.hun_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('hun_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL,
-	CONSTRAINT hun_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.hun_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.msr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.msr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.msr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.msr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.msr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.msr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.msr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.msr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.msr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.msr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.msr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('msr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.msr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(80),
-	veg_class character varying(80),
-	CONSTRAINT msr_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.msr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.ncr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.ncr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.ncr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.ncr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.ncr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.ncr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.ncr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('ncr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.ncr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT ncr_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.ncr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.rrr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.rrr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.rrr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.rrr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.rrr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.rrr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.rrr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.rrr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.rrr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.rrr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.rrr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('rrr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.rrr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT rrr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.rrr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.scr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.scr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.scr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.scr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.scr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.scr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.scr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('scr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.scr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT scr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.scr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wcr_wetland_polygons_final_merged_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.wcr_wetland_polygons_final_merged_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.wcr_wetland_polygons_final_merged_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.wcr_wetland_polygons_final_merged_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.wcr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.wcr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.wcr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('public.seq_test'::regclass), '000'::text),
-	reserv text NOT NULL,
-	geom geometry,
-	gid integer NOT NULL,
-	CONSTRAINT wcr_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.wcr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: bre_wetlands_final_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.bre_wetlands_final_geom_gist CASCADE;
-CREATE INDEX bre_wetlands_final_geom_gist ON wetland_census.bre_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: hin_wetlands_final_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.hin_wetlands_final_geom_gist CASCADE;
-CREATE INDEX hin_wetlands_final_geom_gist ON wetland_census.hin_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: hun_wetland_polygons_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.hun_wetland_polygons_geom_gist CASCADE;
-CREATE INDEX hun_wetland_polygons_geom_gist ON wetland_census.hun_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: msr_wetlands_final_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.msr_wetlands_final_geom_gist CASCADE;
-CREATE INDEX msr_wetlands_final_geom_gist ON wetland_census.msr_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: scr_wetlands_final_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.scr_wetlands_final_geom_gist CASCADE;
-CREATE INDEX scr_wetlands_final_geom_gist ON wetland_census.scr_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: wcr_wetland_polygons_final_merged_geom_gist | type: INDEX --
--- DROP INDEX IF EXISTS wetland_census.wcr_wetland_polygons_final_merged_geom_gist CASCADE;
-CREATE INDEX wcr_wetland_polygons_final_merged_geom_gist ON wetland_census.wcr_wetlands_final
-	USING gist
-	(
-	  geom
-	)	WITH (FILLFACTOR = 90);
--- ddl-end --
-
--- object: classification_coordinates_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_coordinates_log_trigger ON wetland_census.cm_wetland_classification_coordinates CASCADE;
-CREATE TRIGGER classification_coordinates_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_coordinates
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_cowardin_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_cowardin_log_trigger ON wetland_census.cm_wetland_cowardin_classification CASCADE;
-CREATE TRIGGER classification_cowardin_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_cowardin_classification
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_cowardin_special_mod_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_cowardin_special_mod_log_trigger ON wetland_census.cm_wetland_cowardin_special_modifier CASCADE;
-CREATE TRIGGER classification_cowardin_special_mod_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_cowardin_special_modifier
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_cowardin_special_mod_other_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_cowardin_special_mod_other_trigger ON wetland_census.cm_wetland_cowardin_special_modifier_other CASCADE;
-CREATE TRIGGER classification_cowardin_special_mod_other_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_cowardin_special_modifier_other
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_cowardin_water_regime_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_cowardin_water_regime_trigger ON wetland_census.cm_wetland_cowardin_water_regime CASCADE;
-CREATE TRIGGER classification_cowardin_water_regime_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_cowardin_water_regime
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_dominant_species_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_dominant_species_log_trigger ON wetland_census.cm_wetland_dominant_species CASCADE;
-CREATE TRIGGER classification_dominant_species_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_dominant_species
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_geometry_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_geometry_log_trigger ON wetland_census.cm_wetland_classification_geometry CASCADE;
-CREATE TRIGGER classification_geometry_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_geometry
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_id_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_id_log_trigger ON wetland_census.cm_wetland_classification_id CASCADE;
-CREATE TRIGGER classification_id_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_id
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_inland_landform_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_inland_landform_log_trigger ON wetland_census.cm_wetland_inland_landform_norm CASCADE;
-CREATE TRIGGER classification_inland_landform_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_inland_landform_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_landscape_position_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_landscape_position_log_trigger ON wetland_census.cm_wetland_landscape_position_norm CASCADE;
-CREATE TRIGGER classification_landscape_position_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_landscape_position_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_llww_modifiers_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_llww_modifiers_log_trigger ON wetland_census.cm_wetland_llww_modifiers CASCADE;
-CREATE TRIGGER classification_llww_modifiers_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_llww_modifiers
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_notes_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_notes_log_trigger ON wetland_census.cm_wetland_classification_notes CASCADE;
-CREATE TRIGGER classification_notes_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_notes
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_photos_caption_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_photos_caption_log_trigger ON wetland_census.cm_wetland_photos_caption_norm CASCADE;
-CREATE TRIGGER classification_photos_caption_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_photos_caption_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_photos_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_photos_log_trigger ON wetland_census.cm_wetland_photos_norm CASCADE;
-CREATE TRIGGER classification_photos_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_photos_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_photos_url_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_photos_url_log_trigger ON wetland_census.cm_wetland_photos_url_norm CASCADE;
-CREATE TRIGGER classification_photos_url_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_photos_url_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_plant_community_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_plant_community_log_trigger ON wetland_census.cm_wetland_plant_community_norm CASCADE;
-CREATE TRIGGER classification_plant_community_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_plant_community_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_plant_community_other_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_plant_community_other_log_trigger ON wetland_census.cm_wetland_plant_community_other CASCADE;
-CREATE TRIGGER classification_plant_community_other_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_plant_community_other
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_polygon_id_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_polygon_id_log_trigger ON wetland_census.cm_wetland_classification_polygon_id CASCADE;
-CREATE TRIGGER classification_polygon_id_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_polygon_id
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_recorder_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_recorder_log_trigger ON wetland_census.cm_wetland_classification_recorder CASCADE;
-CREATE TRIGGER classification_recorder_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_recorder
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_reservation_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_reservation_log_trigger ON wetland_census.cm_wetland_classification_reservation CASCADE;
-CREATE TRIGGER classification_reservation_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_classification_reservation
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: classification_water_flow_path_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS classification_water_flow_path_log_trigger ON wetland_census.cm_wetland_water_flow_path CASCADE;
-CREATE TRIGGER classification_water_flow_path_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.cm_wetland_water_flow_path
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: cm_wetland_classification_insert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS cm_wetland_classification_insert_trigger ON wetland_census.wetland_classification CASCADE;
-CREATE TRIGGER cm_wetland_classification_insert_trigger
-	AFTER INSERT 
-	ON wetland_census.wetland_classification
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.cm_wetland_classification_insert();
--- ddl-end --
-
--- object: metric1_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric1_norm_log_trigger ON wetland_census.metric1_norm CASCADE;
-CREATE TRIGGER metric1_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric1_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric1_value_trigger ON wetland_census.metric1_norm CASCADE;
-CREATE TRIGGER metric1_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric1_value();
--- ddl-end --
-
--- object: metric2a_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric2a_norm_log_trigger ON wetland_census.metric2a_norm CASCADE;
-CREATE TRIGGER metric2a_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric2a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric2a_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric2a_value_trigger ON wetland_census.metric2a_norm CASCADE;
-CREATE TRIGGER metric2a_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric2a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric2a_value();
--- ddl-end --
-
--- object: metric2b_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric2b_norm_log_trigger ON wetland_census.metric2b_norm CASCADE;
-CREATE TRIGGER metric2b_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric2b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric2b_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric2b_value_trigger ON wetland_census.metric2b_norm CASCADE;
-CREATE TRIGGER metric2b_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric2b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric2b_value();
--- ddl-end --
-
--- object: metric3a_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3a_norm_log_trigger ON wetland_census.metric3a_norm CASCADE;
-CREATE TRIGGER metric3a_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric3a_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3a_value_trigger ON wetland_census.metric3a_norm CASCADE;
-CREATE TRIGGER metric3a_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric3a_value();
--- ddl-end --
-
--- object: metric3b_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3b_norm_log_trigger ON wetland_census.metric3b_norm CASCADE;
-CREATE TRIGGER metric3b_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric3b_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3b_value_trigger ON wetland_census.metric3b_norm CASCADE;
-CREATE TRIGGER metric3b_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric3b_value();
--- ddl-end --
-
--- object: metric3c_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3c_norm_log_trigger ON wetland_census.metric3c_norm CASCADE;
-CREATE TRIGGER metric3c_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric3c_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3c_value_trigger ON wetland_census.metric3c_norm CASCADE;
-CREATE TRIGGER metric3c_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric3c_value();
--- ddl-end --
-
--- object: metric3d_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3d_norm_log_trigger ON wetland_census.metric3d_norm CASCADE;
-CREATE TRIGGER metric3d_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3d_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric3d_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3d_value_trigger ON wetland_census.metric3d_norm CASCADE;
-CREATE TRIGGER metric3d_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3d_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric3d_value();
--- ddl-end --
-
--- object: metric3e_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3e_norm_log_trigger ON wetland_census.metric3e_norm CASCADE;
-CREATE TRIGGER metric3e_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3e_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric3e_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric3e_value_trigger ON wetland_census.metric3e_norm CASCADE;
-CREATE TRIGGER metric3e_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric3e_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric3e_value();
--- ddl-end --
-
--- object: metric4a_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4a_norm_log_trigger ON wetland_census.metric4a_norm CASCADE;
-CREATE TRIGGER metric4a_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric4a_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4a_value_trigger ON wetland_census.metric4a_norm CASCADE;
-CREATE TRIGGER metric4a_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4a_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric4a_value();
--- ddl-end --
-
--- object: metric4b_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4b_norm_log_trigger ON wetland_census.metric4b_norm CASCADE;
-CREATE TRIGGER metric4b_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric4b_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4b_value_trigger ON wetland_census.metric4b_norm CASCADE;
-CREATE TRIGGER metric4b_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric4b_value();
--- ddl-end --
-
--- object: metric4c_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4c_norm_log_trigger ON wetland_census.metric4c_norm CASCADE;
-CREATE TRIGGER metric4c_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric4c_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric4c_value_trigger ON wetland_census.metric4c_norm CASCADE;
-CREATE TRIGGER metric4c_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric4c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric4c_value();
--- ddl-end --
-
--- object: metric5_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric5_norm_log_trigger ON wetland_census.metric5_norm CASCADE;
-CREATE TRIGGER metric5_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric5_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric5_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric5_value_trigger ON wetland_census.metric5_norm CASCADE;
-CREATE TRIGGER metric5_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric5_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric5_value();
--- ddl-end --
-
--- object: metric6a1_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a1_norm_log_trigger ON wetland_census.metric6a1_norm CASCADE;
-CREATE TRIGGER metric6a1_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a1_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a1_value_trigger ON wetland_census.metric6a1_norm CASCADE;
-CREATE TRIGGER metric6a1_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a1_value();
--- ddl-end --
-
--- object: metric6a2_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a2_norm_log_trigger ON wetland_census.metric6a2_norm CASCADE;
-CREATE TRIGGER metric6a2_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a2_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a2_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a2_value_trigger ON wetland_census.metric6a2_norm CASCADE;
-CREATE TRIGGER metric6a2_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a2_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a2_value();
--- ddl-end --
-
--- object: metric6a3_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a3_norm_log_trigger ON wetland_census.metric6a3_norm CASCADE;
-CREATE TRIGGER metric6a3_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a3_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a3_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a3_value_trigger ON wetland_census.metric6a3_norm CASCADE;
-CREATE TRIGGER metric6a3_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a3_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a3_value();
--- ddl-end --
-
--- object: metric6a4_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a4_norm_log_trigger ON wetland_census.metric6a4_norm CASCADE;
-CREATE TRIGGER metric6a4_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a4_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a4_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a4_value_trigger ON wetland_census.metric6a4_norm CASCADE;
-CREATE TRIGGER metric6a4_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a4_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a4_value();
--- ddl-end --
-
--- object: metric6a5_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a5_norm_log_trigger ON wetland_census.metric6a5_norm CASCADE;
-CREATE TRIGGER metric6a5_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a5_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a5_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a5_value_trigger ON wetland_census.metric6a5_norm CASCADE;
-CREATE TRIGGER metric6a5_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a5_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a5_value();
--- ddl-end --
-
--- object: metric6a6_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a6_norm_log_trigger ON wetland_census.metric6a6_norm CASCADE;
-CREATE TRIGGER metric6a6_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a6_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a6_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a6_value_trigger ON wetland_census.metric6a6_norm CASCADE;
-CREATE TRIGGER metric6a6_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a6_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a6_value();
--- ddl-end --
-
--- object: metric6a7_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a7_norm_log_trigger ON wetland_census.metric6a7_norm CASCADE;
-CREATE TRIGGER metric6a7_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a7_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6a7_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6a7_value_trigger ON wetland_census.metric6a7_norm CASCADE;
-CREATE TRIGGER metric6a7_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6a7_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6a7_value();
--- ddl-end --
-
--- object: metric6b_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6b_norm_log_trigger ON wetland_census.metric6b_norm CASCADE;
-CREATE TRIGGER metric6b_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6b_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6b_value_trigger ON wetland_census.metric6b_norm CASCADE;
-CREATE TRIGGER metric6b_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6b_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6b_value();
--- ddl-end --
-
--- object: metric6c_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6c_norm_log_trigger ON wetland_census.metric6c_norm CASCADE;
-CREATE TRIGGER metric6c_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6c_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6c_value_trigger ON wetland_census.metric6c_norm CASCADE;
-CREATE TRIGGER metric6c_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6c_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6c_value();
--- ddl-end --
-
--- object: metric6d1_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d1_norm_log_trigger ON wetland_census.metric6d1_norm CASCADE;
-CREATE TRIGGER metric6d1_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6d1_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d1_value_trigger ON wetland_census.metric6d1_norm CASCADE;
-CREATE TRIGGER metric6d1_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d1_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6d1_value();
--- ddl-end --
-
--- object: metric6d2_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d2_norm_log_trigger ON wetland_census.metric6d2_norm CASCADE;
-CREATE TRIGGER metric6d2_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d2_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6d2_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d2_value_trigger ON wetland_census.metric6d2_norm CASCADE;
-CREATE TRIGGER metric6d2_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d2_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6d2_value();
--- ddl-end --
-
--- object: metric6d3_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d3_norm_log_trigger ON wetland_census.metric6d3_norm CASCADE;
-CREATE TRIGGER metric6d3_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d3_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6d3_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d3_value_trigger ON wetland_census.metric6d3_norm CASCADE;
-CREATE TRIGGER metric6d3_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d3_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6d3_value();
--- ddl-end --
-
--- object: metric6d4_norm_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d4_norm_log_trigger ON wetland_census.metric6d4_norm CASCADE;
-CREATE TRIGGER metric6d4_norm_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d4_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: metric6d4_value_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric6d4_value_trigger ON wetland_census.metric6d4_norm CASCADE;
-CREATE TRIGGER metric6d4_value_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.metric6d4_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric6d4_value();
--- ddl-end --
-
--- object: metric_insert_all_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS metric_insert_all_trigger ON wetland_census.oram_v2 CASCADE;
-CREATE TRIGGER metric_insert_all_trigger
-	AFTER INSERT 
-	ON wetland_census.oram_v2
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oram_metric_insert_all();
--- ddl-end --
-
--- object: oram_id_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_id_log_trigger ON wetland_census.oram_id CASCADE;
-CREATE TRIGGER oram_id_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_id
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_notes_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_notes_log_trigger ON wetland_census.oram_notes CASCADE;
-CREATE TRIGGER oram_notes_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_notes
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_photos_caption_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_photos_caption_log_trigger ON wetland_census.oram_photos_caption_norm CASCADE;
-CREATE TRIGGER oram_photos_caption_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_photos_caption_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_photos_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_photos_log_trigger ON wetland_census.oram_photos_norm CASCADE;
-CREATE TRIGGER oram_photos_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_photos_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_photos_url_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_photos_url_log_trigger ON wetland_census.oram_photos_url_norm CASCADE;
-CREATE TRIGGER oram_photos_url_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_photos_url_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_poly_id_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_poly_id_log_trigger ON wetland_census.oram_poly_id_norm CASCADE;
-CREATE TRIGGER oram_poly_id_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_poly_id_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_recorder_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_recorder_log_trigger ON wetland_census.oram_recorder_norm CASCADE;
-CREATE TRIGGER oram_recorder_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_recorder_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_reservation_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_reservation_log_trigger ON wetland_census.oram_reservation_norm CASCADE;
-CREATE TRIGGER oram_reservation_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_reservation_norm
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: oram_score_lookup_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_score_lookup_log_trigger ON wetland_census.oram_score_lookup_all CASCADE;
-CREATE TRIGGER oram_score_lookup_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oram_score_lookup_all
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: bcr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bcr_geom_log_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER bcr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: bed_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bed_geom_log_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER bed_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.bed_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: bre_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bre_geom_log_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER bre_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.bre_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: bwr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bwr_geom_log_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER bwr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: ecr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS ecr_geom_log_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER ecr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: hin_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS hin_geom_log_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER hin_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.hin_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: hun_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS hun_geom_log_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER hun_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.hun_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: msr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS msr_geom_log_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER msr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.msr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: ncr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS ncr_geom_log_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER ncr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: rrr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS rrr_geom_log_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER rrr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: scr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS scr_geom_log_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER scr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.scr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wcr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS wcr_geom_log_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER wcr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wetland_census.oec_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.oec_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.oec_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.oec_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oec_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.oec_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.oec_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.oec_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oec_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oec_wetlands_final CASCADE;
-CREATE TABLE wetland_census.oec_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('oec_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.oec_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT oec_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.oec_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: oec_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oec_geom_log_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER oec_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.oec_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wetland_census.brr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.brr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.brr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.brr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.brr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.brr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.brr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.brr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.brr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.brr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.brr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('brr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.brr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT brr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.brr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: brr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS brr_geom_log_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER brr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.brr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wetland_census.gpr_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.gpr_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.gpr_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.gpr_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.gpr_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.gpr_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.gpr_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.gpr_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.gpr_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.gpr_wetlands_final CASCADE;
-CREATE TABLE wetland_census.gpr_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('gpr_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.gpr_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT gpr_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.gpr_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: gpr_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS gpr_geom_log_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER gpr_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wetland_census.war_id_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.war_id_seq CASCADE;
-CREATE SEQUENCE wetland_census.war_id_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.war_id_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.war_wetlands_final_gid_seq | type: SEQUENCE --
--- DROP SEQUENCE IF EXISTS wetland_census.war_wetlands_final_gid_seq CASCADE;
-CREATE SEQUENCE wetland_census.war_wetlands_final_gid_seq
-	INCREMENT BY 1
-	MINVALUE 1
-	MAXVALUE 9223372036854775807
-	START WITH 1
-	CACHE 1
-	NO CYCLE
-	OWNED BY NONE;
--- ddl-end --
-ALTER SEQUENCE wetland_census.war_wetlands_final_gid_seq OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.war_wetlands_final | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.war_wetlands_final CASCADE;
-CREATE TABLE wetland_census.war_wetlands_final(
-	unique_id text NOT NULL DEFAULT to_char(nextval('war_id_seq'::regclass), '000'::text),
-	reserv text NOT NULL,
-	gid integer NOT NULL DEFAULT nextval('wetland_census.war_wetlands_final_gid_seq'::regclass),
-	hgm_class character varying(20),
-	veg_class character varying(20),
-	CONSTRAINT war_wetlands_final_pkey PRIMARY KEY (unique_id,reserv)
-
-) INHERITS(wetland_census.cm_wetlands_all)
-;
--- ddl-end --
-ALTER TABLE wetland_census.war_wetlands_final OWNER TO postgres;
--- ddl-end --
-
--- object: war_geom_log_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS war_geom_log_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER war_geom_log_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.war_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.change_trigger();
--- ddl-end --
-
--- object: wetland_census.oram_data_joined | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.oram_data_joined CASCADE;
-CREATE VIEW wetland_census.oram_data_joined
-AS 
-
-WITH id_joined AS (
-         SELECT a.oram_id,
-            a.polygon_id,
-            b.reservation
-           FROM (oram_poly_id_norm a
-             LEFT JOIN oram_reservation_norm b ON ((a.oram_id = b.oram_id)))
-        ), metric1 AS (
-         SELECT metric1_norm.oram_id,
-            metric1_norm.selection AS metric1_selection
-           FROM metric1_norm
-          GROUP BY metric1_norm.oram_id, metric1_norm.selection
-        ), metric2a AS (
-         SELECT metric2a_norm.oram_id,
-            metric2a_norm.selection AS metric2a_selection
-           FROM metric2a_norm
-          GROUP BY metric2a_norm.oram_id, metric2a_norm.selection
-        ), metric2b_agg AS (
-         SELECT metric2b_norm.oram_id,
-            string_agg(metric2b_norm.selection, ','::text) AS metric2b_selection
-           FROM metric2b_norm
-          GROUP BY metric2b_norm.oram_id
-        ), metric3a_agg AS (
-         SELECT metric3a_norm.oram_id,
-            string_agg(metric3a_norm.selection, ','::text) AS metric3a_selection
-           FROM metric3a_norm
-          GROUP BY metric3a_norm.oram_id
-        ), metric3b_agg AS (
-         SELECT metric3b_norm.oram_id,
-            string_agg(metric3b_norm.selection, ','::text) AS metric3b_selection
-           FROM metric3b_norm
-          GROUP BY metric3b_norm.oram_id
-        ), metric3c AS (
-         SELECT metric3c_norm.oram_id,
-            metric3c_norm.selection AS metric3c_selection
-           FROM metric3c_norm
-          GROUP BY metric3c_norm.oram_id, metric3c_norm.selection
-        ), metric3d_agg AS (
-         SELECT metric3d_norm.oram_id,
-            string_agg(metric3d_norm.selection, ','::text) AS metric3d_selection
-           FROM metric3d_norm
-          GROUP BY metric3d_norm.oram_id
-        ), metric3e_agg AS (
-         SELECT metric3e_norm.oram_id,
-            string_agg(metric3e_norm.selection, ','::text) AS metric3e_selection
-           FROM metric3e_norm
-          GROUP BY metric3e_norm.oram_id
-        ), hydro_disturbance_agg AS (
-         SELECT hydro_disturbances_norm.oram_id,
-            string_agg(hydro_disturbances_norm.disturbances_hydro, ','::text) AS hydro_disturbances
-           FROM hydro_disturbances_norm
-          GROUP BY hydro_disturbances_norm.oram_id
-        ), metric4a_agg AS (
-         SELECT metric4a_norm.oram_id,
-            string_agg(metric4a_norm.selection, ','::text) AS metric4a_selection
-           FROM metric4a_norm
-          GROUP BY metric4a_norm.oram_id
-        ), metric4b AS (
-         SELECT metric4b_norm.oram_id,
-            metric4b_norm.selection AS metric4b_selection
-           FROM metric4b_norm
-          GROUP BY metric4b_norm.oram_id, metric4b_norm.selection
-        ), metric4c_agg AS (
-         SELECT metric4c_norm.oram_id,
-            string_agg(metric4c_norm.selection, ','::text) AS metric4c_selection
-           FROM metric4c_norm
-          GROUP BY metric4c_norm.oram_id
-        ), substrate_disturbance_agg AS (
-         SELECT substrate_disturbances_norm.oram_id,
-            string_agg(substrate_disturbances_norm.disturbances_substrate, ','::text) AS substrate_disturbances
-           FROM substrate_disturbances_norm
-          GROUP BY substrate_disturbances_norm.oram_id
-        ), metric5_agg AS (
-         SELECT metric5_norm.oram_id,
-            string_agg(metric5_norm.selection, ','::text) AS metric5_selection
-           FROM metric5_norm
-          GROUP BY metric5_norm.oram_id
-        ), metric6a1 AS (
-         SELECT metric6a1_norm.oram_id,
-            string_agg(metric6a1_norm.selection, ','::text) AS metric6a1_selection_aquatic_bed
-           FROM metric6a1_norm
-          GROUP BY metric6a1_norm.oram_id
-        ), metric6a2 AS (
-         SELECT metric6a2_norm.oram_id,
-            string_agg(metric6a2_norm.selection, ','::text) AS metric6a2_selection_emergent
-           FROM metric6a2_norm
-          GROUP BY metric6a2_norm.oram_id
-        ), metric6a3 AS (
-         SELECT metric6a3_norm.oram_id,
-            string_agg(metric6a3_norm.selection, ','::text) AS metric6a3_selection_shrub
-           FROM metric6a3_norm
-          GROUP BY metric6a3_norm.oram_id
-        ), metric6a4 AS (
-         SELECT metric6a4_norm.oram_id,
-            string_agg(metric6a4_norm.selection, ','::text) AS metric6a4_selection_forest
-           FROM metric6a4_norm
-          GROUP BY metric6a4_norm.oram_id
-        ), metric6a5 AS (
-         SELECT metric6a5_norm.oram_id,
-            string_agg(metric6a5_norm.selection, ','::text) AS metric6a5_selection_mudflat
-           FROM metric6a5_norm
-          GROUP BY metric6a5_norm.oram_id
-        ), metric6a6 AS (
-         SELECT metric6a6_norm.oram_id,
-            string_agg(metric6a6_norm.selection, ','::text) AS metric6a6_selection_open_water
-           FROM metric6a6_norm
-          GROUP BY metric6a6_norm.oram_id
-        ), metric6a7 AS (
-         SELECT metric6a7_norm.oram_id,
-            string_agg(metric6a7_norm.selection, ','::text) AS metric6a7_selection_other
-           FROM metric6a7_norm
-          GROUP BY metric6a7_norm.oram_id
-        ), metric6b AS (
-         SELECT metric6b_norm.oram_id,
-            metric6b_norm.selection AS metric6b_selection
-           FROM metric6b_norm
-          GROUP BY metric6b_norm.oram_id, metric6b_norm.selection
-        ), metric6c AS (
-         SELECT metric6c_norm.oram_id,
-            metric6c_norm.selection AS metric6c_selection
-           FROM metric6c_norm
-          GROUP BY metric6c_norm.oram_id, metric6c_norm.selection
-        ), metric6d1 AS (
-         SELECT metric6d1_norm.oram_id,
-            metric6d1_norm.selection AS metric6d1_hummocks_tussocks
-           FROM metric6d1_norm
-          GROUP BY metric6d1_norm.oram_id, metric6d1_norm.selection
-        ), metric6d2 AS (
-         SELECT metric6d2_norm.oram_id,
-            metric6d2_norm.selection AS metric6d2_cwd
-           FROM metric6d2_norm
-          GROUP BY metric6d2_norm.oram_id, metric6d2_norm.selection
-        ), metric6d3 AS (
-         SELECT metric6d3_norm.oram_id,
-            metric6d3_norm.selection AS metric6d3_standing_dead
-           FROM metric6d3_norm
-          GROUP BY metric6d3_norm.oram_id, metric6d3_norm.selection
-        ), metric6d4 AS (
-         SELECT metric6d4_norm.oram_id,
-            metric6d4_norm.selection AS metric6d4_amphibian_pools
-           FROM metric6d4_norm
-          GROUP BY metric6d4_norm.oram_id, metric6d4_norm.selection
+ALTER TABLE oram_metrics OWNER TO jreinier;
+
+--
+-- TOC entry 718 (class 1259 OID 652121)
+-- Name: oram_scores; Type: VIEW; Schema: wetland; Owner: jreinier
+--
+
+CREATE VIEW oram_scores AS
+ WITH a AS (
+         SELECT oram_metric_values.fulcrum_id,
+            oram_metric_values.metric1_value AS metric1_score,
+            oram_metric_values.metric2a_value AS metric2a_score,
+                CASE
+                    WHEN (oram_metric_values.metric2b2_value IS NOT NULL) THEN ((COALESCE((oram_metric_values.metric2b1_value)::numeric, (0)::numeric) + COALESCE((oram_metric_values.metric2b2_value)::numeric, (0)::numeric)) / (2)::numeric)
+                    ELSE (oram_metric_values.metric2b1_value)::numeric
+                END AS metric2b_score,
+            ((((COALESCE(oram_metric_values.metric3a1_value, 0) + COALESCE(oram_metric_values.metric3a2_value, 0)) + COALESCE(oram_metric_values.metric3a3_value, 0)) + COALESCE(oram_metric_values.metric3a4_value, 0)) + COALESCE(oram_metric_values.metric3a5_value, 0)) AS metric3a_score,
+            (((COALESCE(oram_metric_values.metric3b1_value, 0) + COALESCE(oram_metric_values.metric3b2_value, 0)) + COALESCE(oram_metric_values.metric3b3_value, 0)) + COALESCE(oram_metric_values.metric3b4_value, 0)) AS metric3b_score,
+            oram_metric_values.metric3c_value AS metric3c_score,
+                CASE
+                    WHEN (oram_metric_values.metric3d2_value IS NOT NULL) THEN ((COALESCE((oram_metric_values.metric3d1_value)::numeric, (0)::numeric) + COALESCE((oram_metric_values.metric3d2_value)::numeric, (0)::numeric)) / (2)::numeric)
+                    ELSE (oram_metric_values.metric3d1_value)::numeric
+                END AS metric3d_score,
+                CASE
+                    WHEN (oram_metric_values.metric3e2_value IS NOT NULL) THEN ((COALESCE((oram_metric_values.metric3e1_value)::numeric, (0)::numeric) + COALESCE((oram_metric_values.metric3e2_value)::numeric, (0)::numeric)) / (2)::numeric)
+                    ELSE (oram_metric_values.metric3e1_value)::numeric
+                END AS metric3e_score,
+                CASE
+                    WHEN (oram_metric_values.metric4a2_value IS NOT NULL) THEN ((COALESCE((oram_metric_values.metric4a1_value)::numeric, (0)::numeric) + COALESCE((oram_metric_values.metric4a2_value)::numeric, (0)::numeric)) / (2)::numeric)
+                    ELSE (oram_metric_values.metric4a1_value)::numeric
+                END AS metric4a_score,
+            oram_metric_values.metric4b_value AS metric4b_score,
+                CASE
+                    WHEN (oram_metric_values.metric4c2_value IS NOT NULL) THEN ((COALESCE((oram_metric_values.metric4c1_value)::numeric, (0)::numeric) + COALESCE((oram_metric_values.metric4c2_value)::numeric, (0)::numeric)) / (2)::numeric)
+                    ELSE (oram_metric_values.metric4c1_value)::numeric
+                END AS metric4c_score,
+                CASE
+                    WHEN ((COALESCE(oram_metric_values.metric5_value1, 0) + COALESCE(oram_metric_values.metric5_value2, 0)) > 10) THEN 10
+                    ELSE oram_metric_values.metric5_value1
+                END AS metric5_score,
+            ((((((COALESCE(oram_metric_values.metric6a1_value, 0) + COALESCE(oram_metric_values.metric6a2_value, 0)) + COALESCE(oram_metric_values.metric6a3_value, 0)) + COALESCE(oram_metric_values.metric6a4_value, 0)) + COALESCE(oram_metric_values.metric6a5_value, 0)) + COALESCE(oram_metric_values.metric6a6_value, 0)) + COALESCE(oram_metric_values.metric6a_other_value1, 0)) AS metric6a_score,
+            oram_metric_values.metric6b_value AS metric6b_score,
+            oram_metric_values.metric6c_value AS metric6c_score,
+            (((COALESCE(oram_metric_values.metric6d1_value, 0) + COALESCE(oram_metric_values.metric6d2_value, 0)) + COALESCE(oram_metric_values.metric6d3_value, 0)) + COALESCE(oram_metric_values.metric6d4_value, 0)) AS metric6d_score
+           FROM oram_metric_values
+        ), b AS (
+         SELECT a_1.fulcrum_id,
+            a_1.metric1_score,
+            a_1.metric2a_score,
+            a_1.metric2b_score,
+            a_1.metric3a_score,
+            a_1.metric3b_score,
+            a_1.metric3c_score,
+            a_1.metric3d_score,
+            a_1.metric3e_score,
+            a_1.metric4a_score,
+            a_1.metric4b_score,
+            a_1.metric4c_score,
+            a_1.metric5_score,
+            a_1.metric6a_score,
+            a_1.metric6b_score,
+            a_1.metric6c_score,
+            a_1.metric6d_score,
+            ((((((((((((((((COALESCE(a_1.metric1_score, 0) + COALESCE(a_1.metric2a_score, 0)))::numeric + COALESCE(a_1.metric2b_score, (0)::numeric)) + (COALESCE(a_1.metric3a_score, 0))::numeric) + (COALESCE(a_1.metric3b_score, 0))::numeric) + (COALESCE(a_1.metric3c_score, 0))::numeric) + COALESCE(a_1.metric3d_score, (0)::numeric)) + COALESCE(a_1.metric3e_score, (0)::numeric)) + COALESCE(a_1.metric4a_score, (0)::numeric)) + (COALESCE(a_1.metric4b_score, 0))::numeric) + COALESCE(a_1.metric4c_score, (0)::numeric)) + (COALESCE(a_1.metric5_score, 0))::numeric) + (COALESCE(a_1.metric6a_score, 0))::numeric) + (COALESCE(a_1.metric6b_score, 0))::numeric) + (COALESCE(a_1.metric6c_score, 0))::numeric) + (COALESCE(a_1.metric6d_score, 0))::numeric) AS grand_total
+           FROM a a_1
+        ), c AS (
+         SELECT b_1.fulcrum_id,
+                CASE
+                    WHEN (b_1.grand_total < 30.0) THEN '1'::text
+                    WHEN ((b_1.grand_total > 29.9) AND (b_1.grand_total < 50.0)) THEN '2a'::text
+                    WHEN ((b_1.grand_total > 49.9) AND (b_1.grand_total < 60.0)) THEN '2b'::text
+                    WHEN (b_1.grand_total > 59.0) THEN '3'::text
+                    ELSE NULL::text
+                END AS category
+           FROM b b_1
         )
- SELECT id_joined.oram_id,
-    id_joined.polygon_id,
-    id_joined.reservation,
-    metric1.metric1_selection,
-    metric2a.metric2a_selection,
-    metric2b_agg.metric2b_selection,
-    metric3a_agg.metric3a_selection,
-    metric3b_agg.metric3b_selection,
-    metric3c.metric3c_selection,
-    metric3d_agg.metric3d_selection,
-    metric3e_agg.metric3e_selection,
-    hydro_disturbance_agg.hydro_disturbances,
-    metric4a_agg.metric4a_selection,
-    metric4b.metric4b_selection,
-    metric4c_agg.metric4c_selection,
-    substrate_disturbance_agg.substrate_disturbances,
-    metric5_agg.metric5_selection,
-    metric6a1.metric6a1_selection_aquatic_bed,
-    metric6a2.metric6a2_selection_emergent,
-    metric6a3.metric6a3_selection_shrub,
-    metric6a4.metric6a4_selection_forest,
-    metric6a5.metric6a5_selection_mudflat,
-    metric6a6.metric6a6_selection_open_water,
-    metric6a7.metric6a7_selection_other,
-    metric6b.metric6b_selection,
-    metric6c.metric6c_selection,
-    metric6d1.metric6d1_hummocks_tussocks,
-    metric6d2.metric6d2_cwd,
-    metric6d3.metric6d3_standing_dead,
-    metric6d4.metric6d4_amphibian_pools
-   FROM (((((((((((((((((((((((((((id_joined
-     LEFT JOIN metric1 USING (oram_id))
-     LEFT JOIN metric2a USING (oram_id))
-     LEFT JOIN metric2b_agg USING (oram_id))
-     LEFT JOIN metric3a_agg USING (oram_id))
-     LEFT JOIN metric3b_agg USING (oram_id))
-     LEFT JOIN metric3c USING (oram_id))
-     LEFT JOIN metric3d_agg USING (oram_id))
-     LEFT JOIN metric3e_agg USING (oram_id))
-     LEFT JOIN hydro_disturbance_agg USING (oram_id))
-     LEFT JOIN metric4a_agg USING (oram_id))
-     LEFT JOIN metric4b USING (oram_id))
-     LEFT JOIN metric4c_agg USING (oram_id))
-     LEFT JOIN substrate_disturbance_agg USING (oram_id))
-     LEFT JOIN metric5_agg USING (oram_id))
-     LEFT JOIN metric6a1 USING (oram_id))
-     LEFT JOIN metric6a2 USING (oram_id))
-     LEFT JOIN metric6a3 USING (oram_id))
-     LEFT JOIN metric6a4 USING (oram_id))
-     LEFT JOIN metric6a5 USING (oram_id))
-     LEFT JOIN metric6a6 USING (oram_id))
-     LEFT JOIN metric6a7 USING (oram_id))
-     LEFT JOIN metric6b USING (oram_id))
-     LEFT JOIN metric6c USING (oram_id))
-     LEFT JOIN metric6d1 USING (oram_id))
-     LEFT JOIN metric6d2 USING (oram_id))
-     LEFT JOIN metric6d3 USING (oram_id))
-     LEFT JOIN metric6d4 USING (oram_id));
--- ddl-end --
-ALTER VIEW wetland_census.oram_data_joined OWNER TO postgres;
--- ddl-end --
+ SELECT a.fulcrum_id,
+    a.metric1_score,
+    a.metric2a_score,
+    a.metric2b_score,
+    a.metric3a_score,
+    a.metric3b_score,
+    a.metric3c_score,
+    a.metric3d_score,
+    a.metric3e_score,
+    a.metric4a_score,
+    a.metric4b_score,
+    a.metric4c_score,
+    a.metric5_score,
+    a.metric6a_score,
+    a.metric6b_score,
+    a.metric6c_score,
+    a.metric6d_score,
+    b.grand_total,
+    c.category
+   FROM ((a
+     LEFT JOIN b ON (((a.fulcrum_id)::text = (b.fulcrum_id)::text)))
+     LEFT JOIN c ON (((a.fulcrum_id)::text = (c.fulcrum_id)::text)));
 
--- object: wetland_census.bcr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.bcr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.bcr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-	UPDATE bcr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE bcr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.bcr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE oram_scores OWNER TO jreinier;
 
--- object: wetland_census.bed_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.bed_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.bed_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 729 (class 1259 OID 652230)
+-- Name: oram_v2_photos; Type: TABLE; Schema: wetland; Owner: postgres
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-	UPDATE bed_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE bed_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.bed_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE oram_v2_photos (
+    fulcrum_id text,
+    fulcrum_parent_id text,
+    fulcrum_record_id text,
+    version bigint,
+    caption text,
+    latitude double precision,
+    longitude double precision,
+    geometry public.geometry(Point,4326),
+    file_size bigint,
+    uploaded_at timestamp without time zone,
+    exif_date_time text,
+    exif_gps_altitude text,
+    exif_gps_date_stamp text,
+    exif_gps_time_stamp text,
+    exif_gps_dop text,
+    exif_gps_img_direction text,
+    exif_gps_img_direction_ref text,
+    exif_gps_latitude text,
+    exif_gps_latitude_ref text,
+    exif_gps_longitude text,
+    exif_gps_longitude_ref text,
+    exif_make text,
+    exif_model text,
+    exif_orientation text,
+    exif_pixel_x_dimension text,
+    exif_pixel_y_dimension text,
+    exif_software text,
+    exif_x_resolution text,
+    exif_y_resolution text
+);
 
--- object: wetland_census.bre_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.bre_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.bre_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE bre_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE bre_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.bre_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE oram_v2_photos OWNER TO postgres;
 
--- object: wetland_census.brr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.brr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.brr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 730 (class 1259 OID 652254)
+-- Name: plant_community_classification; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE brr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE brr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.brr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE plant_community_classification (
+    fulcrum_id character varying(100) NOT NULL,
+    plant_community text,
+    modifier_one text,
+    modifier_two text,
+    modifier_three text
+);
 
--- object: wetland_census.bwr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.bwr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.bwr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-	UPDATE bwr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE bwr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.bwr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE plant_community_classification OWNER TO jreinier;
 
--- object: wetland_census.ecr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.ecr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.ecr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 731 (class 1259 OID 652266)
+-- Name: water_flow_path; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE ecr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE ecr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.ecr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE water_flow_path (
+    fulcrum_id character varying(100) NOT NULL,
+    water_flow_path text
+);
 
--- object: wetland_census.gpr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.gpr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.gpr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE gpr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE gpr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.gpr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE water_flow_path OWNER TO jreinier;
 
--- object: wetland_census.hin_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.hin_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.hin_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 719 (class 1259 OID 652126)
+-- Name: wetland_classification; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE hin_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE hin_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.hin_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE wetland_classification (
+    fulcrum_id character varying(100),
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    created_by text,
+    updated_by text,
+    system_created_at timestamp without time zone,
+    system_updated_at timestamp without time zone,
+    version bigint,
+    status text,
+    project text,
+    assigned_to text,
+    latitude double precision,
+    longitude double precision,
+    geometry public.geometry(Point,4326),
+    reservation text,
+    polygon_id text,
+    data_recorded_by_initials text,
+    classification_level text,
+    landscape_position text,
+    inland_landform text,
+    water_flow_path text,
+    llww_modifiers text,
+    cowardin_classification text,
+    cowardin_water_regime text,
+    cowardin_special_modifier text,
+    cowardin_special_modifier_other text,
+    plant_community text,
+    plant_community_other text,
+    sp1 text,
+    sp2 text,
+    sp3 text,
+    sp4 text,
+    sp5 text,
+    sp6 text,
+    sp7 text,
+    sp8 text,
+    sp9 text,
+    sp10 text,
+    notes text,
+    photos text,
+    photos_caption text,
+    photos_url text
+);
 
--- object: wetland_census.hun_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.hun_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.hun_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-            BEGIN
-            IF(TG_OP='INSERT') THEN
-            UPDATE hun_wetlands_final
-            SET unique_id = trim(unique_id);
-            ELSIF(TP_OP='UPDATE') THEN
-            UPDATE hun_wetlands_final
-            SET unique_id = trim(unique_id);
-            END IF;
-            RETURN NEW;
-            END;
-            
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.hun_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE wetland_classification OWNER TO jreinier;
 
--- object: wetland_census.msr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.msr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.msr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 732 (class 1259 OID 652272)
+-- Name: wetland_classification_photos; Type: TABLE; Schema: wetland; Owner: postgres
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE msr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE msr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.msr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE wetland_classification_photos (
+    fulcrum_id text,
+    fulcrum_parent_id text,
+    fulcrum_record_id text,
+    version bigint,
+    caption text,
+    latitude double precision,
+    longitude double precision,
+    geometry public.geometry(Point,4326),
+    file_size bigint,
+    uploaded_at timestamp without time zone,
+    exif_date_time text,
+    exif_gps_altitude text,
+    exif_gps_date_stamp text,
+    exif_gps_time_stamp text,
+    exif_gps_dop text,
+    exif_gps_img_direction text,
+    exif_gps_img_direction_ref text,
+    exif_gps_latitude text,
+    exif_gps_latitude_ref text,
+    exif_gps_longitude text,
+    exif_gps_longitude_ref text,
+    exif_make text,
+    exif_model text,
+    exif_orientation text,
+    exif_pixel_x_dimension text,
+    exif_pixel_y_dimension text,
+    exif_software text,
+    exif_x_resolution text,
+    exif_y_resolution text
+);
 
--- object: wetland_census.ncr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.ncr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.ncr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE ncr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE ncr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.ncr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE wetland_classification_photos OWNER TO postgres;
 
--- object: wetland_census.oec_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oec_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.oec_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 733 (class 1259 OID 652278)
+-- Name: wetland_classification_pre_fulcrum; Type: TABLE; Schema: wetland; Owner: postgres
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE oec_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE oec_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oec_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE wetland_classification_pre_fulcrum (
+    project_label character varying(80),
+    investigators character varying(80),
+    start_date date,
+    end_date date,
+    photos character varying(80),
+    unique_id character varying(20) NOT NULL,
+    state character varying(80),
+    county character varying(80),
+    reserv character varying(20) NOT NULL,
+    eight_digit_huc character varying(80),
+    twelve_digit_huc character varying(80),
+    p_class character varying(80),
+    p_subclass character varying(80),
+    p_comp character varying(80),
+    s_class character varying(80),
+    s_subclass character varying(80),
+    s_comp character varying(80),
+    o1_class character varying(80),
+    o1_subclass character varying(80),
+    o1_comp character varying(80),
+    o2_class character varying(80),
+    o2_subclass character varying(80),
+    o2_comp character varying(80),
+    o3_class character varying(80),
+    o3_subclass character varying(80),
+    o3_comp character varying(80),
+    o4_class character varying(80),
+    o4_subclass character varying(80),
+    o4_comp character varying(80),
+    o5_class character varying(80),
+    o5_subclass character varying(80),
+    o5_comp character varying(80),
+    o6_class character varying(80),
+    o6_subclass character varying(80),
+    o6_comp character varying(80),
+    p_landscape character varying(80),
+    p_gradient_type character varying(80),
+    p_ls_mod character varying(80),
+    p_landform character varying(80),
+    p_lf_mod character varying(80),
+    p_waterflow character varying(80),
+    p_wf_mod character varying(80),
+    p_other_mod1 character varying(80),
+    p_other_mod2 character varying(80),
+    p_other_mod3 character varying(80),
+    s_landscape character varying(80),
+    s_gradient_type character varying(80),
+    s_ls_mod character varying(80),
+    s_landform character varying(80),
+    s_lf_mod character varying(80),
+    s_waterflow character varying(80),
+    s_wf_mod character varying(80),
+    s_other_mod1 character varying(80),
+    s_other_mod2 character varying(80),
+    s_other_mod3 character varying(80),
+    o1_landscape character varying(80),
+    o1_gradient_type character varying(80),
+    o1_ls_mod character varying(80),
+    o1_landform character varying(80),
+    o1_lf_mod character varying(80),
+    o1_waterflow character varying(80),
+    o1_wf_mod character varying(80),
+    o1_other_mod1 character varying(80),
+    o1_other_mod2 character varying(80),
+    o1_other_mod3 character varying(80),
+    o2_landscape character varying(80),
+    o2_gradient_type character varying(80),
+    o2_ls_mod character varying(80),
+    o2_landform character varying(80),
+    o2_lf_mod character varying(80),
+    o2_waterflow character varying(80),
+    o2_wf_mod character varying(80),
+    o2_other_mod1 character varying(80),
+    o2_other_mod2 character varying(80),
+    o2_other_mod3 character varying(80),
+    p_cow_system character varying(80),
+    p_cow_class character varying(80),
+    p_cow_water character varying(80),
+    p_cow_special character varying(80),
+    s_cow_system character varying(80),
+    s_cow_class character varying(80),
+    s_cow_water character varying(80),
+    s_cow_special character varying(80),
+    o1_cow_system character varying(80),
+    o1_cow_class character varying(80),
+    o1_cow_water character varying(80),
+    o1_cow_special character varying(80),
+    o2_cow_system character varying(80),
+    o2_cow_class character varying(80),
+    o2_cow_water character varying(80),
+    o2_cow_special character varying(80),
+    o3_cow_system character varying(80),
+    o3_cow_class character varying(80),
+    o3_cow_water character varying(80),
+    o3_cow_special character varying(80),
+    o4_cow_system character varying(80),
+    o4_cow_class character varying(80),
+    o4_cow_water character varying(80),
+    o4_cow_special character varying(80),
+    serial_id bigint NOT NULL
+);
 
--- object: wetland_census.rrr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.rrr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.rrr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-	UPDATE rrr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE rrr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.rrr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE wetland_classification_pre_fulcrum OWNER TO postgres;
 
--- object: wetland_census.scr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.scr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.scr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 734 (class 1259 OID 652284)
+-- Name: wetland_grts_large_polys; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-	UPDATE scr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE scr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.scr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE TABLE wetland_grts_large_polys (
+    gid integer NOT NULL,
+    siteid character varying(25),
+    xcoord numeric,
+    ycoord numeric,
+    mdcaty character varying(16),
+    wgt numeric,
+    stratum character varying(4),
+    panel character varying(8),
+    evalstatus character varying(7),
+    evalreason character varying(1),
+    __gid numeric,
+    reserv character varying(19),
+    area_acres double precision,
+    poly_type character varying(7),
+    size_class character varying(18),
+    cm_id character varying(4),
+    area numeric,
+    perimeter numeric,
+    ap_ratio double precision,
+    geom public.geometry(Point)
+);
 
--- object: wetland_census.war_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.war_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.war_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE war_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE war_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.war_wetland_trim() OWNER TO postgres;
--- ddl-end --
+ALTER TABLE wetland_grts_large_polys OWNER TO jreinier;
 
--- object: wetland_census.wcr_wetland_trim | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.wcr_wetland_trim() CASCADE;
-CREATE FUNCTION wetland_census.wcr_wetland_trim ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
+--
+-- TOC entry 735 (class 1259 OID 652290)
+-- Name: wetland_grts_large_polys_gid_seq; Type: SEQUENCE; Schema: wetland; Owner: jreinier
+--
 
-  BEGIN
-  IF(TG_OP='INSERT') THEN
-  UPDATE wcr_wetlands_final
-		SET unique_id = trim(unique_id);
-	ELSIF(TP_OP='UPDATE') THEN
-	UPDATE wcr_wetlands_final
-		SET unique_id = trim(unique_id);
-	END IF;
-	RETURN NEW;
-END;
- 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.wcr_wetland_trim() OWNER TO postgres;
--- ddl-end --
+CREATE SEQUENCE wetland_grts_large_polys_gid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
--- object: bcr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bcr_wetland_trim_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER bcr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.bcr_wetland_trim();
--- ddl-end --
 
--- object: bed_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bed_wetland_trim_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER bed_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.bed_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.bed_wetland_trim();
--- ddl-end --
+ALTER TABLE wetland_grts_large_polys_gid_seq OWNER TO jreinier;
 
--- object: bre_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bre_wetland_trim_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER bre_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.bre_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.bre_wetland_trim();
--- ddl-end --
+--
+-- TOC entry 5796 (class 0 OID 0)
+-- Dependencies: 735
+-- Name: wetland_grts_large_polys_gid_seq; Type: SEQUENCE OWNED BY; Schema: wetland; Owner: jreinier
+--
 
--- object: brr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS brr_wetland_trim_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER brr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.brr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.brr_wetland_trim();
--- ddl-end --
+ALTER SEQUENCE wetland_grts_large_polys_gid_seq OWNED BY wetland_grts_large_polys.gid;
 
--- object: bwr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS bwr_wetland_trim_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER bwr_wetland_trim_trigger
-	AFTER INSERT OR DELETE OR UPDATE
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.bwr_wetland_trim();
--- ddl-end --
 
--- object: ecr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS ecr_wetland_trim_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER ecr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.ecr_wetland_trim();
--- ddl-end --
+--
+-- TOC entry 736 (class 1259 OID 652292)
+-- Name: wetland_grts_small_polys; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
--- object: gpr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS gpr_wetland_trim_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER gpr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.gpr_wetland_trim();
--- ddl-end --
+CREATE TABLE wetland_grts_small_polys (
+    gid integer NOT NULL,
+    siteid character varying(36),
+    xcoord numeric,
+    ycoord numeric,
+    mdcaty character varying(16),
+    wgt double precision,
+    stratum character varying(4),
+    panel character varying(8),
+    evalstatus character varying(7),
+    evalreason character varying(1),
+    reserv character varying(19),
+    area_acres double precision,
+    poly_type character varying(7),
+    size_class character varying(18),
+    cm_id character varying(4),
+    area numeric,
+    perimeter numeric,
+    ap_ratio numeric,
+    geom public.geometry(Point)
+);
 
--- object: hin_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS hin_wetland_trim_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER hin_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.hin_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.hin_wetland_trim();
--- ddl-end --
 
--- object: hun_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS hun_wetland_trim_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER hun_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.hun_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.hun_wetland_trim();
--- ddl-end --
+ALTER TABLE wetland_grts_small_polys OWNER TO jreinier;
 
--- object: msr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS msr_wetland_trim_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER msr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.msr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.msr_wetland_trim();
--- ddl-end --
+--
+-- TOC entry 737 (class 1259 OID 652298)
+-- Name: wetland_grts_small_polys_gid_seq; Type: SEQUENCE; Schema: wetland; Owner: jreinier
+--
 
--- object: ncr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS ncr_wetland_trim_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER ncr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.ncr_wetland_trim();
--- ddl-end --
+CREATE SEQUENCE wetland_grts_small_polys_gid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
--- object: oec_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oec_wetland_trim_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER oec_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.oec_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.oec_wetland_trim();
--- ddl-end --
 
--- object: rrr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS rrr_wetland_trim_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER rrr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.rrr_wetland_trim();
--- ddl-end --
+ALTER TABLE wetland_grts_small_polys_gid_seq OWNER TO jreinier;
 
--- object: scr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS scr_wetland_trim_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER scr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.scr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.scr_wetland_trim();
--- ddl-end --
+--
+-- TOC entry 5797 (class 0 OID 0)
+-- Dependencies: 737
+-- Name: wetland_grts_small_polys_gid_seq; Type: SEQUENCE OWNED BY; Schema: wetland; Owner: jreinier
+--
 
--- object: war_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS war_wetland_trim_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER war_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.war_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.war_wetland_trim();
--- ddl-end --
+ALTER SEQUENCE wetland_grts_small_polys_gid_seq OWNED BY wetland_grts_small_polys.gid;
 
--- object: wcr_wetland_trim_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS wcr_wetland_trim_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER wcr_wetland_trim_trigger
-	AFTER INSERT 
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH ROW
-	EXECUTE PROCEDURE wetland_census.wcr_wetland_trim();
--- ddl-end --
 
--- object: wetland_census.cm_wetland_class_oram | type: VIEW --
--- DROP VIEW IF EXISTS wetland_census.cm_wetland_class_oram CASCADE;
-CREATE VIEW wetland_census.cm_wetland_class_oram
-AS 
+--
+-- TOC entry 738 (class 1259 OID 652300)
+-- Name: wetland_grts_xlarge_polys; Type: TABLE; Schema: wetland; Owner: jreinier
+--
 
-WITH joined AS (
-         SELECT poly.unique_id,
-            poly.reserv,
-            poly.geom,
-            poly.area_acres,
-            poly.poly_type,
-            poly.cm_id,
-            id.classification_level,
-            id.classification_id
-           FROM (cm_wetlands_all poly
-             LEFT JOIN cm_wetland_classification_id id ON (((poly.unique_id = id.polygon_id) AND (poly.reserv = id.reservation) AND (id.classification_level <> 'secondary'::text) AND (id.classification_level <> 'minor'::text))))
-        ), landscape_agg AS (
-         SELECT cm_wetland_landscape_position_norm.classification_id,
-            string_agg(cm_wetland_landscape_position_norm.landscape_position, ','::text) AS landscape_position
-           FROM cm_wetland_landscape_position_norm
-          GROUP BY cm_wetland_landscape_position_norm.classification_id
-        ), landform_agg AS (
-         SELECT cm_wetland_inland_landform_norm.classification_id,
-            string_agg(cm_wetland_inland_landform_norm.inland_landform, ','::text) AS landform
-           FROM cm_wetland_inland_landform_norm
-          GROUP BY cm_wetland_inland_landform_norm.classification_id
-        ), waterflow_agg AS (
-         SELECT cm_wetland_water_flow_path.classification_id,
-            string_agg(cm_wetland_water_flow_path.water_flow_path, ','::text) AS water_flow_path
-           FROM cm_wetland_water_flow_path
-          GROUP BY cm_wetland_water_flow_path.classification_id
-        ), llww_mod_agg AS (
-         SELECT cm_wetland_llww_modifiers.classification_id,
-            string_agg(cm_wetland_llww_modifiers.llww_modifiers, ','::text) AS llww_modifiers
-           FROM cm_wetland_llww_modifiers
-          GROUP BY cm_wetland_llww_modifiers.classification_id
-        ), cowardin_agg AS (
-         SELECT cm_wetland_cowardin_classification.classification_id,
-            string_agg(cm_wetland_cowardin_classification.cowardin_classification, ','::text) AS cowardin_classification
-           FROM cm_wetland_cowardin_classification
-          GROUP BY cm_wetland_cowardin_classification.classification_id
-        ), cowardin_water_agg AS (
-         SELECT cm_wetland_cowardin_water_regime.classification_id,
-            string_agg(cm_wetland_cowardin_water_regime.cowardin_water_regime, ','::text) AS cowardin_water_regime
-           FROM cm_wetland_cowardin_water_regime
-          GROUP BY cm_wetland_cowardin_water_regime.classification_id
-        ), cowardin_special_agg AS (
-         SELECT cm_wetland_cowardin_special_modifier.classification_id,
-            string_agg(cm_wetland_cowardin_special_modifier.cowardin_special_modifier, ','::text) AS cowardin_special_modifier
-           FROM cm_wetland_cowardin_special_modifier
-          GROUP BY cm_wetland_cowardin_special_modifier.classification_id
-        ), plant_comm_agg AS (
-         SELECT cm_wetland_plant_community_norm.classification_id,
-            string_agg(cm_wetland_plant_community_norm.plant_community, ','::text) AS plant_community
-           FROM cm_wetland_plant_community_norm
-          GROUP BY cm_wetland_plant_community_norm.classification_id
-        ), oram_poly_res AS (
-         SELECT oram_poly_id_norm.oram_id,
-            oram_poly_id_norm.polygon_id,
-            oram_reservation_norm.reservation,
-            cm_wetland_oram_category.grand_total,
-            cm_wetland_oram_category.category
-           FROM ((oram_poly_id_norm
-             LEFT JOIN oram_reservation_norm USING (oram_id))
-             LEFT JOIN cm_wetland_oram_category USING (oram_id))
-        ), oram_poly_agg AS (
-         SELECT oram_poly_res.polygon_id,
-            oram_poly_res.reservation,
-            string_agg((oram_poly_res.oram_id)::text, ','::text) AS oram_id,
-            string_agg((oram_poly_res.grand_total)::text, ','::text) AS grand_total,
-            string_agg(oram_poly_res.category, ','::text) AS category
-           FROM oram_poly_res
-          GROUP BY oram_poly_res.polygon_id, oram_poly_res.reservation
+CREATE TABLE wetland_grts_xlarge_polys (
+    gid integer NOT NULL,
+    siteid character varying(26),
+    xcoord numeric,
+    ycoord numeric,
+    mdcaty character varying(16),
+    wgt numeric,
+    stratum character varying(4),
+    panel character varying(8),
+    evalstatus character varying(7),
+    evalreason character varying(1),
+    __gid numeric,
+    reserv character varying(15),
+    area_acres numeric,
+    poly_type character varying(7),
+    size_class character varying(10),
+    cm_id character varying(4),
+    area numeric,
+    perimeter numeric,
+    ap_ratio double precision,
+    geom public.geometry(Point)
+);
+
+
+ALTER TABLE wetland_grts_xlarge_polys OWNER TO jreinier;
+
+--
+-- TOC entry 739 (class 1259 OID 652306)
+-- Name: wetland_grts_xlarge_polys_gid_seq; Type: SEQUENCE; Schema: wetland; Owner: jreinier
+--
+
+CREATE SEQUENCE wetland_grts_xlarge_polys_gid_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE wetland_grts_xlarge_polys_gid_seq OWNER TO jreinier;
+
+--
+-- TOC entry 5798 (class 0 OID 0)
+-- Dependencies: 739
+-- Name: wetland_grts_xlarge_polys_gid_seq; Type: SEQUENCE OWNED BY; Schema: wetland; Owner: jreinier
+--
+
+ALTER SEQUENCE wetland_grts_xlarge_polys_gid_seq OWNED BY wetland_grts_xlarge_polys.gid;
+
+
+--
+-- TOC entry 740 (class 1259 OID 652308)
+-- Name: wetland_oram_data_pre_fulcrum; Type: TABLE; Schema: wetland; Owner: postgres
+--
+
+CREATE TABLE wetland_oram_data_pre_fulcrum (
+    reserv character varying(80) NOT NULL,
+    unique_id character varying(80) NOT NULL,
+    oram_id text NOT NULL,
+    date date,
+    recorder character varying(80),
+    m1_less_01 character varying(80),
+    m1_01_to_03 character varying(80),
+    m1_03_to_3 character varying(80),
+    m1_3_to_10 character varying(80),
+    m1_10_to_25 character varying(80),
+    m1_25_to_50 character varying(80),
+    m1_greater_50 character varying(80),
+    m1_score numeric,
+    m2a_wide character varying(80),
+    m2a_medium character varying(80),
+    m2a_narrow character varying(80),
+    m2a_very_narrow character varying(80),
+    m2a_score numeric,
+    m2b_very_low character varying(80),
+    m2b_low character varying(80),
+    m2b_mod_high character varying(80),
+    m2b_high character varying(80),
+    m2b_score numeric,
+    m3a_high_ph_gw character varying(80),
+    m3a_other_gw character varying(80),
+    m3a_precip character varying(80),
+    m3a_sisw character varying(80),
+    m3a_psw character varying(80),
+    m3a_score numeric,
+    m3b_hndrd_yr_fp character varying(80),
+    m3b_bt_water_human character varying(80),
+    m3b_wl_up_complex character varying(80),
+    m3b_riparian character varying(80),
+    m3b_score numeric,
+    m3c_greater_07m character varying(80),
+    m3c_04_to_07m character varying(80),
+    m3c_less_04m character varying(80),
+    m3c_score numeric,
+    m3d_perm_i_s character varying(80),
+    m3d_reg_i_s character varying(80),
+    m3d_season_i character varying(80),
+    m3d_season_s character varying(80),
+    m3d_score numeric,
+    m3e_none character varying(80),
+    m3e_recovered character varying(80),
+    m3e_recovering character varying(80),
+    m3e_no_recovery character varying(80),
+    m3e_score numeric,
+    m3_ditch character varying(80),
+    m3_dike character varying(80),
+    m3_sw character varying(80),
+    m3_fill_grade character varying(80),
+    m3_dredging character varying(80),
+    m3_tile character varying(80),
+    m3_weir character varying(80),
+    m3_point_source character varying(80),
+    m3_roadbed character varying(80),
+    m3_other character varying(80),
+    m4_mowing character varying(80),
+    m4_grazing character varying(80),
+    m4_clearcut character varying(80),
+    m4_sel_cut character varying(80),
+    m4_cwd_remove character varying(80),
+    m4_sedimentation character varying(80),
+    m4_tox_poll character varying(80),
+    m4_shrub_remove character varying(80),
+    m4_ab_remove character varying(80),
+    m4_farming character varying(80),
+    m4_nutrients character varying(80),
+    m4_dredging character varying(80),
+    m4_other character varying(80),
+    m4a_none character varying(80),
+    m4a_recovered character varying(80),
+    m4a_recovering character varying(80),
+    m4a_no_recovery character varying(80),
+    m4a_score numeric,
+    m4b_excellent character varying(80),
+    m4b_very_good character varying(80),
+    m4b_good character varying(80),
+    m4b_mod_good character varying(80),
+    m4b_fair character varying(80),
+    m4b_poor_fair character varying(80),
+    m4b_poor character varying(80),
+    m4b_score numeric,
+    m4c_none character varying(80),
+    m4c_recovered character varying(80),
+    m4c_recovering character varying(80),
+    m4c_no_recovery character varying(80),
+    m4c_score numeric,
+    m6a_ab numeric,
+    m6a_emergent numeric,
+    m6a_shrub numeric,
+    m6a_forest numeric,
+    m6a_mudflat numeric,
+    m6a_open_water numeric,
+    m6a_other numeric,
+    m6a_score numeric,
+    m6b_high character varying(80),
+    m6b_mod_high character varying(80),
+    m6b_moderate character varying(80),
+    m6b_mod_low character varying(80),
+    m6b_low character varying(80),
+    m6b_none character varying(80),
+    m6b_score numeric,
+    m6c_extensive character varying(80),
+    m6c_moderate character varying(80),
+    m6c_sparse character varying(80),
+    m6c_n_absent character varying(80),
+    m6c_absent character varying(80),
+    m6c_score numeric,
+    m6d_humm_tuss numeric,
+    m6d_cwd numeric,
+    m6d_stand_dead numeric,
+    m6d_breed_pools numeric,
+    m6d_score numeric,
+    m5_bog character varying(80),
+    m5_fen character varying(80),
+    m5_old_growth character varying(80),
+    m5_mature_forest character varying(80),
+    m5_lp_sandprairie character varying(80),
+    m5_rel_wet_prairie character varying(80),
+    m5_unrest_coastal character varying(80),
+    m5_rest_coastal character varying(80),
+    m5_tore_species character varying(80),
+    m5_bird_useage character varying(80),
+    m5_category1 character varying(80),
+    m5_score numeric,
+    grand_total numeric,
+    oram_cat character varying(20),
+    serial_id bigint NOT NULL
+);
+
+
+ALTER TABLE wetland_oram_data_pre_fulcrum OWNER TO postgres;
+
+--
+-- TOC entry 741 (class 1259 OID 652314)
+-- Name: wetland_oram_data_serial_id_seq; Type: SEQUENCE; Schema: wetland; Owner: postgres
+--
+
+CREATE SEQUENCE wetland_oram_data_serial_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE wetland_oram_data_serial_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5799 (class 0 OID 0)
+-- Dependencies: 741
+-- Name: wetland_oram_data_serial_id_seq; Type: SEQUENCE OWNED BY; Schema: wetland; Owner: postgres
+--
+
+ALTER SEQUENCE wetland_oram_data_serial_id_seq OWNED BY wetland_oram_data_pre_fulcrum.serial_id;
+
+
+--
+-- TOC entry 5444 (class 2604 OID 652316)
+-- Name: gid; Type: DEFAULT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_large_polys ALTER COLUMN gid SET DEFAULT nextval('wetland_grts_large_polys_gid_seq'::regclass);
+
+
+--
+-- TOC entry 5445 (class 2604 OID 652317)
+-- Name: gid; Type: DEFAULT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_small_polys ALTER COLUMN gid SET DEFAULT nextval('wetland_grts_small_polys_gid_seq'::regclass);
+
+
+--
+-- TOC entry 5446 (class 2604 OID 652318)
+-- Name: gid; Type: DEFAULT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_xlarge_polys ALTER COLUMN gid SET DEFAULT nextval('wetland_grts_xlarge_polys_gid_seq'::regclass);
+
+
+--
+-- TOC entry 5447 (class 2604 OID 652319)
+-- Name: serial_id; Type: DEFAULT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY wetland_oram_data_pre_fulcrum ALTER COLUMN serial_id SET DEFAULT nextval('wetland_oram_data_serial_id_seq'::regclass);
+
+
+--
+-- TOC entry 5455 (class 2606 OID 652441)
+-- Name: wetlands_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cm_wetlands
+    ADD CONSTRAINT wetlands_pkey PRIMARY KEY (reservation, polygon_number);
+
+
+--
+-- TOC entry 742 (class 1259 OID 653290)
+-- Name: cm_wetland_class_oram; Type: MATERIALIZED VIEW; Schema: wetland; Owner: jreinier
+--
+
+CREATE MATERIALIZED VIEW cm_wetland_class_oram AS
+ WITH oram_poly AS (
+         SELECT a_1.fulcrum_id,
+            regexp_split_to_table(a_1.polygon_id, ','::text) AS polygon_number,
+            a_1.reservation,
+            (b_1.grand_total)::text AS grand_total,
+            b_1.category
+           FROM (oram_v2 a_1
+             LEFT JOIN oram_scores b_1 ON (((b_1.fulcrum_id)::text = (a_1.fulcrum_id)::text)))
         )
- SELECT joined.classification_id,
-    joined.unique_id,
-    joined.reserv,
-    joined.geom,
-    joined.area_acres,
-    joined.poly_type,
-    joined.cm_id,
-    joined.classification_level,
-    landscape_agg.landscape_position,
-    landform_agg.landform,
-    waterflow_agg.water_flow_path,
-    llww_mod_agg.llww_modifiers,
-    cowardin_agg.cowardin_classification,
-    cowardin_water_agg.cowardin_water_regime,
-    cowardin_special_agg.cowardin_special_modifier,
-    plant_comm_agg.plant_community,
-    oram_poly_agg.polygon_id,
-    oram_poly_agg.reservation,
-    oram_poly_agg.oram_id,
-    oram_poly_agg.grand_total,
-    oram_poly_agg.category
-   FROM (((((((((joined
-     LEFT JOIN landscape_agg USING (classification_id))
-     LEFT JOIN landform_agg USING (classification_id))
-     LEFT JOIN waterflow_agg USING (classification_id))
-     LEFT JOIN llww_mod_agg USING (classification_id))
-     LEFT JOIN cowardin_agg USING (classification_id))
-     LEFT JOIN cowardin_water_agg USING (classification_id))
-     LEFT JOIN cowardin_special_agg USING (classification_id))
-     LEFT JOIN plant_comm_agg USING (classification_id))
-     LEFT JOIN oram_poly_agg ON (((joined.unique_id = oram_poly_agg.polygon_id) AND (joined.reserv = oram_poly_agg.reservation))));
--- ddl-end --
-ALTER VIEW wetland_census.cm_wetland_class_oram OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.mapping_pkeys | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.mapping_pkeys CASCADE;
-CREATE TABLE wetland_census.mapping_pkeys(
-	polygon_id text NOT NULL,
-	reservation text NOT NULL,
-	cm_id integer NOT NULL,
-	CONSTRAINT mapping_pkeys_pkey PRIMARY KEY (cm_id),
-	CONSTRAINT mapping_pkeys_polygon_id_reservation_key UNIQUE (polygon_id,reservation)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.mapping_pkeys OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.oram_mapping_pkeys | type: TABLE --
--- DROP TABLE IF EXISTS wetland_census.oram_mapping_pkeys CASCADE;
-CREATE TABLE wetland_census.oram_mapping_pkeys(
-	polygon_id text NOT NULL,
-	reservation text NOT NULL,
-	oram_id integer NOT NULL,
-	CONSTRAINT oram_mapping_pkey PRIMARY KEY (oram_id,polygon_id)
-
-);
--- ddl-end --
-ALTER TABLE wetland_census.oram_mapping_pkeys OWNER TO postgres;
--- ddl-end --
-
--- object: wetland_census.mapping_pkey_upsert | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.mapping_pkey_upsert() CASCADE;
-CREATE FUNCTION wetland_census.mapping_pkey_upsert ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN
-
-INSERT INTO mapping_pkeys SELECT unique_id, reserv, cm_id FROM cm_wetlands_all ON CONFLICT (cm_id) DO UPDATE SET polygon_id = (SELECT unique_id FROM cm_wetlands_all WHERE cm_id = mapping_pkeys.cm_id), reservation = (SELECT reserv FROM cm_wetlands_all WHERE cm_id = mapping_pkeys.cm_id);
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.mapping_pkey_upsert() OWNER TO postgres;
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bed_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bre_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.brr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.hin_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.hun_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.msr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.oec_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.scr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.war_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_upsert_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_upsert();
--- ddl-end --
-
--- object: wetland_census.mapping_pkey_delete | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.mapping_pkey_delete() CASCADE;
-CREATE FUNCTION wetland_census.mapping_pkey_delete ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN
-
-DELETE FROM mapping_pkeys WHERE cm_id NOT IN (SELECT cm_id FROM cm_wetlands_all);
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.mapping_pkey_delete() OWNER TO postgres;
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bed_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bre_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.brr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.hin_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.hun_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.msr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.oec_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.scr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.war_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS mapping_pkey_delete_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.mapping_pkey_delete();
--- ddl-end --
-
--- object: wetland_census.oram_mapping_pkey_upsert | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_mapping_pkey_upsert() CASCADE;
-CREATE FUNCTION wetland_census.oram_mapping_pkey_upsert ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN
-  
-WITH oram_ids_joined AS (
-SELECT * FROM oram_poly_id_norm
-JOIN oram_reservation_norm USING (oram_id))
-
-INSERT INTO oram_mapping_pkeys SELECT polygon_id, reservation, oram_id FROM  oram_ids_joined ON CONFLICT (oram_id,polygon_id) DO UPDATE SET polygon_id  = (SELECT polygon_id FROM oram_ids_joined WHERE oram_id = oram_mapping_pkeys.oram_id AND polygon_id = oram_mapping_pkeys.polygon_id), reservation = (SELECT reservation FROM oram_ids_joined WHERE oram_id = oram_mapping_pkeys.oram_id AND polygon_id = oram_mapping_pkeys.polygon_id);
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_mapping_pkey_upsert() OWNER TO postgres;
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bed_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bre_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.brr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.hin_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.hun_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.msr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.oec_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.scr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.war_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: oram_mapping_pkey_upsert_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_upsert_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_upsert_trigger
-	AFTER INSERT OR UPDATE
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_upsert();
--- ddl-end --
-
--- object: wetland_census.oram_mapping_pkey_delete | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.oram_mapping_pkey_delete() CASCADE;
-CREATE FUNCTION wetland_census.oram_mapping_pkey_delete ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN
-
-DELETE FROM oram_mapping_pkeys WHERE (polygon_id,reservation) NOT IN (SELECT unique_id AS polygon_id, reserv AS reservation FROM cm_wetlands_all);
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.oram_mapping_pkey_delete() OWNER TO postgres;
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.bcr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.bed_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bed_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.bre_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bre_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.brr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.brr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.bwr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.bwr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.ecr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.ecr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.gpr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.gpr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.hin_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.hin_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.hun_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.hun_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.msr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.msr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.ncr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.ncr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.oec_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.oec_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.rrr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.rrr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.scr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.scr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.war_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.war_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: oram_mapping_pkey_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS oram_mapping_pkey_delete_trigger ON wetland_census.wcr_wetlands_final CASCADE;
-CREATE TRIGGER oram_mapping_pkey_delete_trigger
-	AFTER DELETE 
-	ON wetland_census.wcr_wetlands_final
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.oram_mapping_pkey_delete();
--- ddl-end --
-
--- object: wetland_census.unused_oram_id_delete | type: FUNCTION --
--- DROP FUNCTION IF EXISTS wetland_census.unused_oram_id_delete() CASCADE;
-CREATE FUNCTION wetland_census.unused_oram_id_delete ()
-	RETURNS trigger
-	LANGUAGE plpgsql
-	VOLATILE 
-	CALLED ON NULL INPUT
-	SECURITY INVOKER
-	COST 100
-	AS $$
-
-BEGIN
-
-DELETE FROM oram_id WHERE (oram_id) NOT IN (SELECT oram_id FROM oram_poly_id_norm);
-RETURN NEW;
-END 
-$$;
--- ddl-end --
-ALTER FUNCTION wetland_census.unused_oram_id_delete() OWNER TO postgres;
--- ddl-end --
-
--- object: unused_oram_id_delete_trigger | type: TRIGGER --
--- DROP TRIGGER IF EXISTS unused_oram_id_delete_trigger ON wetland_census.oram_poly_id_norm CASCADE;
-CREATE TRIGGER unused_oram_id_delete_trigger
-	AFTER DELETE OR UPDATE
-	ON wetland_census.oram_poly_id_norm
-	FOR EACH STATEMENT
-	EXECUTE PROCEDURE wetland_census.unused_oram_id_delete();
--- ddl-end --
-
--- object: classification_to_mapping_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_id DROP CONSTRAINT IF EXISTS classification_to_mapping_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_id ADD CONSTRAINT classification_to_mapping_fkey FOREIGN KEY (polygon_id,reservation)
-REFERENCES wetland_census.mapping_pkeys (polygon_id,reservation) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_cowardin_classification_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_cowardin_classification DROP CONSTRAINT IF EXISTS cm_wetland_cowardin_classification_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_cowardin_classification ADD CONSTRAINT cm_wetland_cowardin_classification_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_cowardin_special_modifier_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier DROP CONSTRAINT IF EXISTS cm_wetland_cowardin_special_modifier_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier ADD CONSTRAINT cm_wetland_cowardin_special_modifier_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_cowardin_water_regime_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_cowardin_water_regime DROP CONSTRAINT IF EXISTS cm_wetland_cowardin_water_regime_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_cowardin_water_regime ADD CONSTRAINT cm_wetland_cowardin_water_regime_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_inland_landform_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_inland_landform_norm DROP CONSTRAINT IF EXISTS cm_wetland_inland_landform_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_inland_landform_norm ADD CONSTRAINT cm_wetland_inland_landform_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_landscape_position_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_landscape_position_norm DROP CONSTRAINT IF EXISTS cm_wetland_landscape_position_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_landscape_position_norm ADD CONSTRAINT cm_wetland_landscape_position_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_llww_modifiers_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_llww_modifiers DROP CONSTRAINT IF EXISTS cm_wetland_llww_modifiers_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_llww_modifiers ADD CONSTRAINT cm_wetland_llww_modifiers_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric1_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric1_value DROP CONSTRAINT IF EXISTS metric1_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric1_value ADD CONSTRAINT metric1_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric1_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric1_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric1_value DROP CONSTRAINT IF EXISTS metric1_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric1_value ADD CONSTRAINT metric1_value_fkey FOREIGN KEY (metric1_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2a_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2a_value DROP CONSTRAINT IF EXISTS metric2a_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric2a_value ADD CONSTRAINT metric2a_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric2a_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2a_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2a_value DROP CONSTRAINT IF EXISTS metric2a_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric2a_value ADD CONSTRAINT metric2a_value_fkey FOREIGN KEY (metric2a_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2b_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2b_value DROP CONSTRAINT IF EXISTS metric2b_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric2b_value ADD CONSTRAINT metric2b_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric2b_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2b_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2b_value DROP CONSTRAINT IF EXISTS metric2b_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric2b_value ADD CONSTRAINT metric2b_value_fkey FOREIGN KEY (metric2b_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3a_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3a_value DROP CONSTRAINT IF EXISTS metric3a_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3a_value ADD CONSTRAINT metric3a_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric3a_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3a_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3a_value DROP CONSTRAINT IF EXISTS metric3a_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric3a_value ADD CONSTRAINT metric3a_value_fkey FOREIGN KEY (metric3a_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3b_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3b_value DROP CONSTRAINT IF EXISTS metric3b_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3b_value ADD CONSTRAINT metric3b_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric3b_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3b_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3b_value DROP CONSTRAINT IF EXISTS metric3b_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric3b_value ADD CONSTRAINT metric3b_value_fkey FOREIGN KEY (metric3b_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3c_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3c_value DROP CONSTRAINT IF EXISTS metric3c_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3c_value ADD CONSTRAINT metric3c_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric3c_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3c_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3c_value DROP CONSTRAINT IF EXISTS metric3c_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric3c_value ADD CONSTRAINT metric3c_value_fkey FOREIGN KEY (metric3c_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3d_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3d_value DROP CONSTRAINT IF EXISTS metric3d_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3d_value ADD CONSTRAINT metric3d_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric3d_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3d_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3d_value DROP CONSTRAINT IF EXISTS metric3d_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric3d_value ADD CONSTRAINT metric3d_value_fkey FOREIGN KEY (metric3d_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3e_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3e_value DROP CONSTRAINT IF EXISTS metric3e_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3e_value ADD CONSTRAINT metric3e_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric3e_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3e_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3e_value DROP CONSTRAINT IF EXISTS metric3e_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric3e_value ADD CONSTRAINT metric3e_value_fkey FOREIGN KEY (metric3e_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4a_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4a_value DROP CONSTRAINT IF EXISTS metric4a_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4a_value ADD CONSTRAINT metric4a_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric4a_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4a_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4a_value DROP CONSTRAINT IF EXISTS metric4a_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric4a_value ADD CONSTRAINT metric4a_value_fkey FOREIGN KEY (metric4a_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4b_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4b_value DROP CONSTRAINT IF EXISTS metric4b_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4b_value ADD CONSTRAINT metric4b_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric4b_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4b_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4b_value DROP CONSTRAINT IF EXISTS metric4b_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric4b_value ADD CONSTRAINT metric4b_value_fkey FOREIGN KEY (metric4b_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4c_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4c_value DROP CONSTRAINT IF EXISTS metric4c_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4c_value ADD CONSTRAINT metric4c_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric4c_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4c_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4c_value DROP CONSTRAINT IF EXISTS metric4c_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric4c_value ADD CONSTRAINT metric4c_value_fkey FOREIGN KEY (metric4c_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric5_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric5_value DROP CONSTRAINT IF EXISTS metric5_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric5_value ADD CONSTRAINT metric5_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric5_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric5_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric5_value DROP CONSTRAINT IF EXISTS metric5_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric5_value ADD CONSTRAINT metric5_value_fkey FOREIGN KEY (metric5_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a1_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a1_value DROP CONSTRAINT IF EXISTS metric6a1_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a1_value ADD CONSTRAINT metric6a1_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a1_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a1_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a1_value DROP CONSTRAINT IF EXISTS metric6a1_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a1_value ADD CONSTRAINT metric6a1_value_fkey FOREIGN KEY (metric6a1_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a2_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a2_value DROP CONSTRAINT IF EXISTS metric6a2_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a2_value ADD CONSTRAINT metric6a2_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a2_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a2_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a2_value DROP CONSTRAINT IF EXISTS metric6a2_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a2_value ADD CONSTRAINT metric6a2_value_fkey FOREIGN KEY (metric6a2_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a3_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a3_value DROP CONSTRAINT IF EXISTS metric6a3_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a3_value ADD CONSTRAINT metric6a3_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a3_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a3_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a3_value DROP CONSTRAINT IF EXISTS metric6a3_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a3_value ADD CONSTRAINT metric6a3_value_fkey FOREIGN KEY (metric6a3_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a4_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a4_value DROP CONSTRAINT IF EXISTS metric6a4_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a4_value ADD CONSTRAINT metric6a4_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a4_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a4_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a4_value DROP CONSTRAINT IF EXISTS metric6a4_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a4_value ADD CONSTRAINT metric6a4_value_fkey FOREIGN KEY (metric6a4_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a5_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a5_value DROP CONSTRAINT IF EXISTS metric6a5_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a5_value ADD CONSTRAINT metric6a5_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a5_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a5_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a5_value DROP CONSTRAINT IF EXISTS metric6a5_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a5_value ADD CONSTRAINT metric6a5_value_fkey FOREIGN KEY (metric6a5_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a6_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a6_value DROP CONSTRAINT IF EXISTS metric6a6_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a6_value ADD CONSTRAINT metric6a6_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a6_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a6_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a6_value DROP CONSTRAINT IF EXISTS metric6a6_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a6_value ADD CONSTRAINT metric6a6_value_fkey FOREIGN KEY (metric6a6_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a7_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a7_value DROP CONSTRAINT IF EXISTS metric6a7_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a7_value ADD CONSTRAINT metric6a7_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6a7_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a7_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a7_value DROP CONSTRAINT IF EXISTS metric6a7_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a7_value ADD CONSTRAINT metric6a7_value_fkey FOREIGN KEY (metric6a7_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6b_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6b_value DROP CONSTRAINT IF EXISTS metric6b_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6b_value ADD CONSTRAINT metric6b_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6b_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6b_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6b_value DROP CONSTRAINT IF EXISTS metric6b_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6b_value ADD CONSTRAINT metric6b_value_fkey FOREIGN KEY (metric6b_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6c_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6c_value DROP CONSTRAINT IF EXISTS metric6c_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6c_value ADD CONSTRAINT metric6c_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6c_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6c_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6c_value DROP CONSTRAINT IF EXISTS metric6c_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6c_value ADD CONSTRAINT metric6c_value_fkey FOREIGN KEY (metric6c_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d1_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d1_value DROP CONSTRAINT IF EXISTS metric6d1_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d1_value ADD CONSTRAINT metric6d1_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6d1_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d1_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d1_value DROP CONSTRAINT IF EXISTS metric6d1_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d1_value ADD CONSTRAINT metric6d1_value_fkey FOREIGN KEY (metric6d1_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d2_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d2_value DROP CONSTRAINT IF EXISTS metric6d2_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d2_value ADD CONSTRAINT metric6d2_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6d2_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d2_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d2_value DROP CONSTRAINT IF EXISTS metric6d2_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d2_value ADD CONSTRAINT metric6d2_value_fkey FOREIGN KEY (metric6d2_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d3_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d3_value DROP CONSTRAINT IF EXISTS metric6d3_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d3_value ADD CONSTRAINT metric6d3_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6d3_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d3_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d3_value DROP CONSTRAINT IF EXISTS metric6d3_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d3_value ADD CONSTRAINT metric6d3_value_fkey FOREIGN KEY (metric6d3_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d4_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d4_value DROP CONSTRAINT IF EXISTS metric6d4_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d4_value ADD CONSTRAINT metric6d4_id_fkey FOREIGN KEY (oram_id,selection)
-REFERENCES wetland_census.metric6d4_norm (oram_id,selection) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d4_value_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d4_value DROP CONSTRAINT IF EXISTS metric6d4_value_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d4_value ADD CONSTRAINT metric6d4_value_fkey FOREIGN KEY (metric6d4_value,lookup_id)
-REFERENCES wetland_census.oram_score_lookup_all (value,lookup_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_plant_community_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_plant_community_norm DROP CONSTRAINT IF EXISTS cm_wetland_plant_community_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_plant_community_norm ADD CONSTRAINT cm_wetland_plant_community_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_water_flow_path_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_water_flow_path DROP CONSTRAINT IF EXISTS cm_wetland_water_flow_path_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_water_flow_path ADD CONSTRAINT cm_wetland_water_flow_path_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: poly_id_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_poly_id_norm DROP CONSTRAINT IF EXISTS poly_id_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_poly_id_norm ADD CONSTRAINT poly_id_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_to_mapping_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_poly_id_norm DROP CONSTRAINT IF EXISTS oram_to_mapping_fkey CASCADE;
-ALTER TABLE wetland_census.oram_poly_id_norm ADD CONSTRAINT oram_to_mapping_fkey FOREIGN KEY (oram_id,polygon_id)
-REFERENCES wetland_census.oram_mapping_pkeys (oram_id,polygon_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: reservation_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_reservation_norm DROP CONSTRAINT IF EXISTS reservation_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_reservation_norm ADD CONSTRAINT reservation_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_coordinates_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_coordinates DROP CONSTRAINT IF EXISTS cm_wetland_classification_coordinates_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_coordinates ADD CONSTRAINT cm_wetland_classification_coordinates_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_coordinates_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_geometry DROP CONSTRAINT IF EXISTS cm_wetland_classification_coordinates_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_geometry ADD CONSTRAINT cm_wetland_classification_coordinates_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_notes_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_notes DROP CONSTRAINT IF EXISTS cm_wetland_classification_notes_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_notes ADD CONSTRAINT cm_wetland_classification_notes_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_polygon_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_polygon_id DROP CONSTRAINT IF EXISTS cm_wetland_classification_polygon_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_polygon_id ADD CONSTRAINT cm_wetland_classification_polygon_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_recorder_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_recorder DROP CONSTRAINT IF EXISTS cm_wetland_classification_recorder_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_recorder ADD CONSTRAINT cm_wetland_classification_recorder_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_classification_reservation_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_classification_reservation DROP CONSTRAINT IF EXISTS cm_wetland_classification_reservation_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_classification_reservation ADD CONSTRAINT cm_wetland_classification_reservation_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_cowardin_special_modifier_other_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier_other DROP CONSTRAINT IF EXISTS cm_wetland_cowardin_special_modifier_other_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_cowardin_special_modifier_other ADD CONSTRAINT cm_wetland_cowardin_special_modifier_other_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_water_flow_path_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_dominant_species DROP CONSTRAINT IF EXISTS cm_wetland_water_flow_path_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_dominant_species ADD CONSTRAINT cm_wetland_water_flow_path_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_photos_caption_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_photos_caption_norm DROP CONSTRAINT IF EXISTS cm_wetland_photos_caption_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_photos_caption_norm ADD CONSTRAINT cm_wetland_photos_caption_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_photos_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_photos_norm DROP CONSTRAINT IF EXISTS cm_wetland_photos_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_photos_norm ADD CONSTRAINT cm_wetland_photos_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_photos_url_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_photos_url_norm DROP CONSTRAINT IF EXISTS cm_wetland_photos_url_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_photos_url_norm ADD CONSTRAINT cm_wetland_photos_url_norm_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: cm_wetland_plant_community_other_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.cm_wetland_plant_community_other DROP CONSTRAINT IF EXISTS cm_wetland_plant_community_other_id_fkey CASCADE;
-ALTER TABLE wetland_census.cm_wetland_plant_community_other ADD CONSTRAINT cm_wetland_plant_community_other_id_fkey FOREIGN KEY (classification_id)
-REFERENCES wetland_census.cm_wetland_classification_id (classification_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: hydro_disturbances_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.hydro_disturbances_norm DROP CONSTRAINT IF EXISTS hydro_disturbances_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.hydro_disturbances_norm ADD CONSTRAINT hydro_disturbances_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric1_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric1_norm DROP CONSTRAINT IF EXISTS metric1_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric1_norm ADD CONSTRAINT metric1_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2a_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2a_norm DROP CONSTRAINT IF EXISTS metric2a_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric2a_norm ADD CONSTRAINT metric2a_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric2b_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric2b_norm DROP CONSTRAINT IF EXISTS metric2b_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric2b_norm ADD CONSTRAINT metric2b_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3a_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3a_norm DROP CONSTRAINT IF EXISTS metric3a_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3a_norm ADD CONSTRAINT metric3a_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3b_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3b_norm DROP CONSTRAINT IF EXISTS metric3b_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3b_norm ADD CONSTRAINT metric3b_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3c_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3c_norm DROP CONSTRAINT IF EXISTS metric3c_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3c_norm ADD CONSTRAINT metric3c_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3d_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3d_norm DROP CONSTRAINT IF EXISTS metric3d_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3d_norm ADD CONSTRAINT metric3d_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric3e_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric3e_norm DROP CONSTRAINT IF EXISTS metric3e_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric3e_norm ADD CONSTRAINT metric3e_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4a_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4a_norm DROP CONSTRAINT IF EXISTS metric4a_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4a_norm ADD CONSTRAINT metric4a_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4b_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4b_norm DROP CONSTRAINT IF EXISTS metric4b_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4b_norm ADD CONSTRAINT metric4b_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric4c_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric4c_norm DROP CONSTRAINT IF EXISTS metric4c_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric4c_norm ADD CONSTRAINT metric4c_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric5_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric5_norm DROP CONSTRAINT IF EXISTS metric5_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric5_norm ADD CONSTRAINT metric5_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a1_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a1_norm DROP CONSTRAINT IF EXISTS metric6a1_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a1_norm ADD CONSTRAINT metric6a1_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a2_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a2_norm DROP CONSTRAINT IF EXISTS metric6a2_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a2_norm ADD CONSTRAINT metric6a2_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a3_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a3_norm DROP CONSTRAINT IF EXISTS metric6a3_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a3_norm ADD CONSTRAINT metric6a3_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a4_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a4_norm DROP CONSTRAINT IF EXISTS metric6a4_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a4_norm ADD CONSTRAINT metric6a4_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a5_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a5_norm DROP CONSTRAINT IF EXISTS metric6a5_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a5_norm ADD CONSTRAINT metric6a5_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a6_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a6_norm DROP CONSTRAINT IF EXISTS metric6a6_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a6_norm ADD CONSTRAINT metric6a6_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6a7_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6a7_norm DROP CONSTRAINT IF EXISTS metric6a7_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6a7_norm ADD CONSTRAINT metric6a7_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6b_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6b_norm DROP CONSTRAINT IF EXISTS metric6b_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6b_norm ADD CONSTRAINT metric6b_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6c_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6c_norm DROP CONSTRAINT IF EXISTS metric6c_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6c_norm ADD CONSTRAINT metric6c_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d1_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d1_norm DROP CONSTRAINT IF EXISTS metric6d1_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d1_norm ADD CONSTRAINT metric6d1_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d2_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d2_norm DROP CONSTRAINT IF EXISTS metric6d2_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d2_norm ADD CONSTRAINT metric6d2_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d3_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d3_norm DROP CONSTRAINT IF EXISTS metric6d3_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d3_norm ADD CONSTRAINT metric6d3_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: metric6d4_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.metric6d4_norm DROP CONSTRAINT IF EXISTS metric6d4_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.metric6d4_norm ADD CONSTRAINT metric6d4_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_notes_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_notes DROP CONSTRAINT IF EXISTS oram_notes_fkey CASCADE;
-ALTER TABLE wetland_census.oram_notes ADD CONSTRAINT oram_notes_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_photos_caption_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_photos_caption_norm DROP CONSTRAINT IF EXISTS oram_photos_caption_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_photos_caption_norm ADD CONSTRAINT oram_photos_caption_norm_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_photos_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_photos_norm DROP CONSTRAINT IF EXISTS oram_photos_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_photos_norm ADD CONSTRAINT oram_photos_norm_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_photos_url_norm_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_photos_url_norm DROP CONSTRAINT IF EXISTS oram_photos_url_norm_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_photos_url_norm ADD CONSTRAINT oram_photos_url_norm_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: oram_recorder_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.oram_recorder_norm DROP CONSTRAINT IF EXISTS oram_recorder_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.oram_recorder_norm ADD CONSTRAINT oram_recorder_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
-
--- object: substrate_disturbances_oram_id_fkey | type: CONSTRAINT --
--- ALTER TABLE wetland_census.substrate_disturbances_norm DROP CONSTRAINT IF EXISTS substrate_disturbances_oram_id_fkey CASCADE;
-ALTER TABLE wetland_census.substrate_disturbances_norm ADD CONSTRAINT substrate_disturbances_oram_id_fkey FOREIGN KEY (oram_id)
-REFERENCES wetland_census.oram_id (oram_id) MATCH SIMPLE
-ON DELETE CASCADE ON UPDATE CASCADE;
--- ddl-end --
+ SELECT a.polygon_number,
+    a.reservation,
+    a.poly_type,
+    a.area_acres,
+    a.geom,
+    b.classification_level,
+    b.landscape_position,
+    b.inland_landform,
+    b.water_flow_path,
+    b.llww_modifiers,
+    b.cowardin_classification,
+    b.cowardin_water_regime,
+    b.cowardin_special_modifier,
+    b.cowardin_special_modifier_other,
+    b.plant_community,
+    b.plant_community_other,
+    string_agg(c.grand_total, ','::text) AS oram_score,
+    string_agg(c.category, ','::text) AS oram_category
+   FROM ((cm_wetlands a
+     LEFT JOIN wetland_classification b ON (((a.polygon_number = b.polygon_id) AND (a.reservation = b.reservation) AND (b.classification_level <> 'secondary'::text) AND (b.classification_level <> 'minor'::text))))
+     LEFT JOIN oram_poly c ON (((a.polygon_number = c.polygon_number) AND (a.reservation = c.reservation))))
+  GROUP BY a.polygon_number, a.reservation, a.poly_type, a.geom, b.classification_level, b.landscape_position, b.inland_landform, b.water_flow_path, b.llww_modifiers, b.cowardin_classification, b.cowardin_water_regime, b.cowardin_special_modifier, b.cowardin_special_modifier_other, b.plant_community, b.plant_community_other
+  ORDER BY a.reservation, a.polygon_number
+  WITH NO DATA;
+
+
+ALTER TABLE cm_wetland_class_oram OWNER TO jreinier;
+
+--
+-- TOC entry 743 (class 1259 OID 653914)
+-- Name: cm_wetland_class_oram_updated; Type: MATERIALIZED VIEW; Schema: wetland; Owner: jreinier
+--
+
+CREATE MATERIALIZED VIEW cm_wetland_class_oram_updated AS
+ SELECT poly.polygon_number,
+    poly.reservation,
+    poly.geom,
+    poly.area_acres,
+    poly.poly_type,
+    poly.classification_level,
+    poly.landscape_position,
+    landscape.landscape_position_new,
+    poly.inland_landform,
+    landform.landform_new,
+    poly.water_flow_path,
+    poly.llww_modifiers,
+    poly.cowardin_classification,
+    poly.cowardin_water_regime,
+    poly.cowardin_special_modifier,
+    poly.plant_community,
+    poly.oram_score,
+    poly.oram_category
+   FROM ((cm_wetland_class_oram poly
+     LEFT JOIN ( SELECT DISTINCT poly_1.polygon_number,
+            poly_1.reservation,
+                CASE poly_1.inland_landform
+                    WHEN 'basin-woodland vernal'::text THEN 'floodplain-basin'::text
+                    WHEN 'basin'::text THEN 'floodplain-basin'::text
+                    WHEN 'flat'::text THEN 'floodplain'::text
+                    ELSE poly_1.inland_landform
+                END AS landform_new
+           FROM cm_wetland_class_oram poly_1,
+            nr_misc.flood_zones_oh_leap_3734 floodzone
+          WHERE (public.st_intersects(poly_1.geom, floodzone.geom) AND (poly_1.inland_landform !~~ '%floodplain%'::text) AND (poly_1.inland_landform IS NOT NULL))) landform ON (((landform.reservation = poly.reservation) AND (landform.polygon_number = poly.polygon_number))))
+     LEFT JOIN ( SELECT DISTINCT poly2.polygon_number,
+            poly2.reservation,
+                CASE poly2.landscape_position
+                    WHEN 'terrene'::text THEN 'terrene riparian'::text
+                    WHEN 'terrene non-riparian'::text THEN 'terrene riparian'::text
+                    ELSE poly2.landscape_position
+                END AS landscape_position_new
+           FROM cm_wetland_class_oram poly2,
+            nr_misc.flood_zones_oh_leap_3734 floodzone
+          WHERE (public.st_intersects(poly2.geom, floodzone.geom) AND (poly2.landscape_position <> 'terrene riparian'::text) AND (poly2.landscape_position IS NOT NULL))) landscape ON (((landscape.reservation = poly.reservation) AND (landscape.polygon_number = poly.polygon_number))))
+  WITH NO DATA;
+
+
+ALTER TABLE cm_wetland_class_oram_updated OWNER TO jreinier;
+
+--
+-- TOC entry 5481 (class 2606 OID 652371)
+-- Name: class_pkey; Type: CONSTRAINT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY wetland_classification_pre_fulcrum
+    ADD CONSTRAINT class_pkey PRIMARY KEY (unique_id, reserv);
+
+
+--
+-- TOC entry 5449 (class 2606 OID 652375)
+-- Name: classification_dominant_species_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY classification_dominant_species
+    ADD CONSTRAINT classification_dominant_species_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5451 (class 2606 OID 652379)
+-- Name: classification_id_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
 
+ALTER TABLE ONLY classification_id
+    ADD CONSTRAINT classification_id_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5453 (class 2606 OID 652385)
+-- Name: cm_oram_data_pkey; Type: CONSTRAINT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY cm_oram_data
+    ADD CONSTRAINT cm_oram_data_pkey PRIMARY KEY (oram_id);
+
+
+--
+-- TOC entry 5459 (class 2606 OID 652387)
+-- Name: cm_wetland_classification_to_fulcrum_format_pkey; Type: CONSTRAINT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY cm_wetland_classification_to_fulcrum_format
+    ADD CONSTRAINT cm_wetland_classification_to_fulcrum_format_pkey PRIMARY KEY (classification_id);
+
+
+--
+-- TOC entry 5461 (class 2606 OID 652389)
+-- Name: cowardin_classification_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5463 (class 2606 OID 652391)
+-- Name: cowardin_special_modifiers_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_special_modifiers
+    ADD CONSTRAINT cowardin_special_modifiers_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5465 (class 2606 OID 652393)
+-- Name: cowardin_water_regime_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_water_regime
+    ADD CONSTRAINT cowardin_water_regime_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5467 (class 2606 OID 652395)
+-- Name: inland_landform_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY inland_landform
+    ADD CONSTRAINT inland_landform_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5469 (class 2606 OID 652397)
+-- Name: landscape_position_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY landscape_position
+    ADD CONSTRAINT landscape_position_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5471 (class 2606 OID 652399)
+-- Name: llww_modifiers_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY llww_modifiers
+    ADD CONSTRAINT llww_modifiers_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5496 (class 2606 OID 654662)
+-- Name: lookup_cowardin_class_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY lookup_cowardin_class
+    ADD CONSTRAINT lookup_cowardin_class_pkey PRIMARY KEY (class);
+
+
+--
+-- TOC entry 5498 (class 2606 OID 654675)
+-- Name: lookup_cowardin_subclass_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY lookup_cowardin_subclass
+    ADD CONSTRAINT lookup_cowardin_subclass_pkey PRIMARY KEY (subclass);
+
+
+--
+-- TOC entry 5494 (class 2606 OID 654636)
+-- Name: lookup_cowardin_system_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY lookup_cowardin_system
+    ADD CONSTRAINT lookup_cowardin_system_pkey PRIMARY KEY (system);
+
+
+--
+-- TOC entry 5473 (class 2606 OID 652405)
+-- Name: oram_ids_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY oram_ids
+    ADD CONSTRAINT oram_ids_pkey PRIMARY KEY (reservation, polygon_number, fulcrum_id);
+
+
+--
+-- TOC entry 5475 (class 2606 OID 652407)
+-- Name: oram_metrics_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY oram_metrics
+    ADD CONSTRAINT oram_metrics_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5492 (class 2606 OID 652417)
+-- Name: oram_pkey; Type: CONSTRAINT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY wetland_oram_data_pre_fulcrum
+    ADD CONSTRAINT oram_pkey PRIMARY KEY (reserv, unique_id, oram_id);
+
+
+--
+-- TOC entry 5457 (class 2606 OID 652421)
+-- Name: oram_v2_pkey; Type: CONSTRAINT; Schema: wetland; Owner: postgres
+--
+
+ALTER TABLE ONLY oram_v2
+    ADD CONSTRAINT oram_v2_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5477 (class 2606 OID 652431)
+-- Name: plant_community_classification_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY plant_community_classification
+    ADD CONSTRAINT plant_community_classification_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5479 (class 2606 OID 652433)
+-- Name: water_flow_path_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY water_flow_path
+    ADD CONSTRAINT water_flow_path_pkey PRIMARY KEY (fulcrum_id);
+
+
+--
+-- TOC entry 5484 (class 2606 OID 652435)
+-- Name: wetland_grts_large_polys_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_large_polys
+    ADD CONSTRAINT wetland_grts_large_polys_pkey PRIMARY KEY (gid);
+
+
+--
+-- TOC entry 5487 (class 2606 OID 652437)
+-- Name: wetland_grts_small_polys_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_small_polys
+    ADD CONSTRAINT wetland_grts_small_polys_pkey PRIMARY KEY (gid);
+
+
+--
+-- TOC entry 5490 (class 2606 OID 652439)
+-- Name: wetland_grts_xlarge_polys_pkey; Type: CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY wetland_grts_xlarge_polys
+    ADD CONSTRAINT wetland_grts_xlarge_polys_pkey PRIMARY KEY (gid);
+
+
+--
+-- TOC entry 5482 (class 1259 OID 652442)
+-- Name: wetland_grts_large_polys_geom_idx; Type: INDEX; Schema: wetland; Owner: jreinier
+--
+
+CREATE INDEX wetland_grts_large_polys_geom_idx ON wetland_grts_large_polys USING gist (geom);
+
+
+--
+-- TOC entry 5485 (class 1259 OID 652443)
+-- Name: wetland_grts_small_polys_geom_idx; Type: INDEX; Schema: wetland; Owner: jreinier
+--
+
+CREATE INDEX wetland_grts_small_polys_geom_idx ON wetland_grts_small_polys USING gist (geom);
+
+
+--
+-- TOC entry 5488 (class 1259 OID 652444)
+-- Name: wetland_grts_xlarge_polys_geom_idx; Type: INDEX; Schema: wetland; Owner: jreinier
+--
+
+CREATE INDEX wetland_grts_xlarge_polys_geom_idx ON wetland_grts_xlarge_polys USING gist (geom);
+
+
+--
+-- TOC entry 5520 (class 2620 OID 652446)
+-- Name: classification_cowardin_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_cowardin_log_trigger AFTER INSERT OR DELETE OR UPDATE ON cowardin_classification FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5521 (class 2620 OID 652447)
+-- Name: classification_cowardin_special_mod_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_cowardin_special_mod_log_trigger AFTER INSERT OR DELETE OR UPDATE ON cowardin_special_modifiers FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5522 (class 2620 OID 652448)
+-- Name: classification_cowardin_water_regime_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_cowardin_water_regime_trigger AFTER INSERT OR DELETE OR UPDATE ON cowardin_water_regime FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5516 (class 2620 OID 652449)
+-- Name: classification_dominant_species_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_dominant_species_log_trigger AFTER INSERT OR DELETE OR UPDATE ON classification_dominant_species FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5517 (class 2620 OID 652451)
+-- Name: classification_id_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_id_log_trigger AFTER INSERT OR DELETE OR UPDATE ON classification_id FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5523 (class 2620 OID 652452)
+-- Name: classification_inland_landform_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_inland_landform_log_trigger AFTER INSERT OR DELETE OR UPDATE ON inland_landform FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5524 (class 2620 OID 652453)
+-- Name: classification_landscape_position_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_landscape_position_log_trigger AFTER INSERT OR DELETE OR UPDATE ON landscape_position FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5525 (class 2620 OID 652454)
+-- Name: classification_llww_modifiers_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_llww_modifiers_log_trigger AFTER INSERT OR DELETE OR UPDATE ON llww_modifiers FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5526 (class 2620 OID 652459)
+-- Name: classification_plant_community_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_plant_community_log_trigger AFTER INSERT OR DELETE OR UPDATE ON plant_community_classification FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5527 (class 2620 OID 652462)
+-- Name: classification_water_flow_path_log_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER classification_water_flow_path_log_trigger AFTER INSERT OR DELETE OR UPDATE ON water_flow_path FOR EACH ROW EXECUTE PROCEDURE change_trigger();
+
+
+--
+-- TOC entry 5519 (class 2620 OID 652463)
+-- Name: cm_wetland_classification_upsert_trigger; Type: TRIGGER; Schema: wetland; Owner: jreinier
+--
+
+CREATE TRIGGER cm_wetland_classification_upsert_trigger AFTER INSERT ON wetland_classification FOR EACH STATEMENT EXECUTE PROCEDURE classification_upsert();
+
+
+--
+-- TOC entry 5518 (class 2620 OID 652464)
+-- Name: oram_upsert_trigger; Type: TRIGGER; Schema: wetland; Owner: postgres
+--
+
+CREATE TRIGGER oram_upsert_trigger AFTER INSERT ON oram_v2 FOR EACH STATEMENT EXECUTE PROCEDURE oram_upsert();
+
+
+--
+-- TOC entry 5499 (class 2606 OID 652470)
+-- Name: classification_dominant_species_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY classification_dominant_species
+    ADD CONSTRAINT classification_dominant_species_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5500 (class 2606 OID 652490)
+-- Name: classification_to_mapping_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY classification_id
+    ADD CONSTRAINT classification_to_mapping_fkey FOREIGN KEY (polygon_number, reservation) REFERENCES cm_wetlands(polygon_number, reservation) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5503 (class 2606 OID 654663)
+-- Name: cowardin_classification_class_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_class_fkey FOREIGN KEY (class) REFERENCES lookup_cowardin_class(class);
+
+
+--
+-- TOC entry 5501 (class 2606 OID 654681)
+-- Name: cowardin_classification_class_fkey1; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_class_fkey1 FOREIGN KEY (class) REFERENCES lookup_cowardin_class(class);
+
+
+--
+-- TOC entry 5505 (class 2606 OID 652495)
+-- Name: cowardin_classification_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5502 (class 2606 OID 654676)
+-- Name: cowardin_classification_subclass_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_subclass_fkey FOREIGN KEY (subclass) REFERENCES lookup_cowardin_subclass(subclass);
+
+
+--
+-- TOC entry 5504 (class 2606 OID 654637)
+-- Name: cowardin_classification_system_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_classification
+    ADD CONSTRAINT cowardin_classification_system_fkey FOREIGN KEY (system) REFERENCES lookup_cowardin_system(system);
+
+
+--
+-- TOC entry 5506 (class 2606 OID 652500)
+-- Name: cowardin_special_modifier_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_special_modifiers
+    ADD CONSTRAINT cowardin_special_modifier_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5507 (class 2606 OID 652505)
+-- Name: cowardin_water_regime_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY cowardin_water_regime
+    ADD CONSTRAINT cowardin_water_regime_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5508 (class 2606 OID 652510)
+-- Name: inland_landform_norm_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY inland_landform
+    ADD CONSTRAINT inland_landform_norm_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5509 (class 2606 OID 652515)
+-- Name: landscape_position_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY landscape_position
+    ADD CONSTRAINT landscape_position_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5510 (class 2606 OID 652520)
+-- Name: llww_modifiers_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY llww_modifiers
+    ADD CONSTRAINT llww_modifiers_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5512 (class 2606 OID 652525)
+-- Name: oram_fulcrum_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY oram_ids
+    ADD CONSTRAINT oram_fulcrum_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES oram_v2(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5513 (class 2606 OID 652530)
+-- Name: oram_metrics_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY oram_metrics
+    ADD CONSTRAINT oram_metrics_fkey FOREIGN KEY (fulcrum_id) REFERENCES oram_v2(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5511 (class 2606 OID 652555)
+-- Name: oram_poly_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY oram_ids
+    ADD CONSTRAINT oram_poly_id_fkey FOREIGN KEY (reservation, polygon_number) REFERENCES cm_wetlands(reservation, polygon_number) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5514 (class 2606 OID 652580)
+-- Name: plant_community_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY plant_community_classification
+    ADD CONSTRAINT plant_community_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5515 (class 2606 OID 652590)
+-- Name: water_flow_path_id_fkey; Type: FK CONSTRAINT; Schema: wetland; Owner: jreinier
+--
+
+ALTER TABLE ONLY water_flow_path
+    ADD CONSTRAINT water_flow_path_id_fkey FOREIGN KEY (fulcrum_id) REFERENCES classification_id(fulcrum_id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+-- Completed on 2017-02-22 10:30:37
+
+--
+-- PostgreSQL database dump complete
+--
 
